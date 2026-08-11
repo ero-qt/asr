@@ -6,6 +6,9 @@ use core::mem;
 #[cfg(feature = "derive")]
 pub use asr_derive::Gui;
 
+#[cfg(feature = "alloc")]
+use alloc::borrow::ToOwned;
+
 use crate::{runtime::sys, watcher::Pair};
 
 use super::map::Map;
@@ -435,8 +438,7 @@ impl Widget for TextInput {
         if let Some(value) = settings_map.get(key) {
             value.get_string_into(&mut self.value);
         } else {
-            self.value.clear();
-            self.value.push_str(args.default);
+            args.default.clone_into(&mut self.value);
         }
     }
 }
