@@ -1,7 +1,12 @@
 //! A fake host for tests: definitions of the wasm imports the runtime layer
 //! links against, backed by in-memory images so readers can run on the host.
 
-use core::{cell::RefCell, num::NonZeroU64};
+use core::{
+    cell::RefCell,
+    future::Future,
+    num::NonZeroU64,
+    task::{Context, Poll, Waker},
+};
 
 use std::vec::Vec;
 
@@ -22,6 +27,13 @@ pub fn with_process<R>(regions: &[(u64, &[u8])], test: impl FnOnce(&Process) -> 
     });
     let process = Process::attach("mock").expect("the mock always attaches");
     test(&process)
+}
+
+/// Polls a future a single time. The mock host answers everything
+/// synchronously, so a future either resolves on its first poll or sits on a
+/// condition the fixture never satisfies.
+pub fn poll_once<F: Future>(future: F) -> Poll<F::Output> {
+    core::pin::pin!(future).poll(&mut Context::from_waker(Waker::noop()))
 }
 
 #[no_mangle]
