@@ -8,7 +8,8 @@ use crate::{
     future::retry,
     print_limited,
     signature::Signature,
-    Address, Address32, PointerSize, Process,
+    string::ArrayWString,
+    Address, Address32, Error, PointerSize, Process,
 };
 
 mod builds;
@@ -22,6 +23,8 @@ mod pointer;
 pub use pointer::UnityPointer;
 mod offsets;
 use offsets::MonoOffsets;
+#[cfg(all(test, not(target_family = "wasm")))]
+mod readers_tests;
 #[cfg(all(test, not(target_family = "wasm")))]
 mod walk_tests;
 
@@ -327,6 +330,22 @@ impl Module {
     /// `Assembly-CSharp` [image](Image).
     pub fn get_default_image(&self, process: &Process) -> Option<Image> {
         self.get_image(process, "Assembly-CSharp")
+    }
+
+    /// Reads a managed string through the reference stored at the given
+    /// address, such as the end of a pointer path or a slot in a static
+    /// table. The string carries its own character count, so no length is
+    /// passed; `N` bounds how many UTF-16 characters the returned buffer
+    /// holds, and a string claiming more than that fails rather than
+    /// truncates, as do a negative count and a null reference. A string
+    /// containing an interior nul character reads in full but compares up to
+    /// the nul.
+    pub fn read_string<const N: usize>(
+        &self,
+        process: &Process,
+        at: Address,
+    ) -> Result<ArrayWString<N>, Error> {
+        managed::read_string(process, self.pointer_size, at)
     }
 
     /// Attaches to a Unity game that is using the standard Mono backend. This
