@@ -47,6 +47,8 @@ fn image(version: Version) -> Vec<u8> {
         (0x1940, "next"),
         (0x1980, "key"),
         (0x19C0, "value"),
+        (0x1A00, "_slots"),
+        (0x1A40, "_lastIndex"),
     ];
     for (at, text) in strings {
         put(&mut i, at, text.as_bytes());
@@ -80,6 +82,31 @@ fn image(version: Version) -> Vec<u8> {
     field(&mut i, 0x760, BASE + 0x1940, 0, 0x14);
     field(&mut i, 0x780, BASE + 0x1980, 0, 0x18);
     field(&mut i, 0x7A0, BASE + 0x19C0, 0, 0x1C);
+
+    // A hash set, its slot class the entry class without the key claim: two
+    // live values around a freed slot, the high-water mark past the count.
+    ptr(&mut i, 0x8, BASE + 0x900);
+    ptr(&mut i, 0x900, BASE + 0xA00);
+    put(&mut i, 0xA00 + field_count_at, &4_u16.to_le_bytes());
+    ptr(&mut i, 0xA00 + 0x80, BASE + 0xB40);
+    field(&mut i, 0xB40, BASE + 0x1800, 0, 0x10);
+    field(&mut i, 0xB60, BASE + 0x1A00, BASE + 0x500, 0x18);
+    field(&mut i, 0xB80, BASE + 0x1880, 0, 0x20);
+    field(&mut i, 0xBA0, BASE + 0x1A40, 0, 0x24);
+    ptr(&mut i, 0x918, BASE + 0xC00);
+    put(&mut i, 0x920, &2_i32.to_le_bytes());
+    put(&mut i, 0x924, &3_i32.to_le_bytes());
+    put(&mut i, 0xC18, &4_u32.to_le_bytes());
+    for (index, entry) in [(111, -1, 0, 7), (-1, -1, 0, 0), (222, -1, 0, 9)]
+        .into_iter()
+        .enumerate()
+    {
+        let at = 0xC20 + 0x10 * index as u64;
+        let (hash, next, key, value): (i32, i32, i32, i32) = entry;
+        for (word, value) in [hash, next, key, value].into_iter().enumerate() {
+            put(&mut i, at + 4 * word as u64, &value.to_le_bytes());
+        }
+    }
 
     // The dictionary's live state: three counted entries over a four-slot
     // backing, the middle one freed, so two pairs are live.
@@ -146,6 +173,18 @@ fn dictionaries_read_their_live_pairs() {
             .read_dictionary::<i32, i32, 8>(process, offsets, slot)
             .unwrap();
         assert_eq!(pairs.as_slice(), [(10, 100), (20, 200)]);
+    });
+}
+
+#[test]
+fn hash_sets_read_their_live_values() {
+    on_fixture(Version::V2019, |process, module| {
+        let slot = Address::new(BASE + 0x8);
+        let offsets = module.get_hash_set_offsets(process, slot).unwrap();
+        let values = module
+            .read_hash_set::<i32, 8>(process, offsets, slot)
+            .unwrap();
+        assert_eq!(values.as_slice(), [7, 9]);
     });
 }
 
