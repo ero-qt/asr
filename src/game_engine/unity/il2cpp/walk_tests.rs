@@ -190,6 +190,15 @@ fn image(version: Version) -> Vec<u8> {
 
     ptr(&mut i, 0x18, BASE + 0x1800); // the slot holding the reference
 
+    // A reference list shares the class; its backing holds an object
+    // address and a null element.
+    ptr(&mut i, 0x1A00, BASE + list_class);
+    ptr(&mut i, 0x1A00 + 0x10, BASE + 0x1B00);
+    put(&mut i, 0x1A00 + 0x18, &2_i32.to_le_bytes());
+    put(&mut i, 0x1B00 + 0x18, &2_u64.to_le_bytes());
+    ptr(&mut i, 0x1B00 + 0x20, BASE + 0x1080);
+    ptr(&mut i, 0x20, BASE + 0x1A00);
+
     i
 }
 
@@ -338,6 +347,23 @@ fn lists_resolve_through_their_own_class() {
         let offsets = module.get_list_offsets(process, at).unwrap();
         let read = module.read_list::<u32, 4>(process, offsets, at).unwrap();
         assert_eq!(read.as_slice(), [11, 22]);
+    });
+}
+
+// A reference list hands back its elements' object addresses, a null
+// element preserved at its position.
+#[test]
+fn reference_lists_resolve_their_element_addresses() {
+    on_fixture(Version::V2022, |process, module| {
+        let at = Address::new(BASE + 0x20);
+        let offsets = module.get_list_offsets(process, at).unwrap();
+        let read = module
+            .read_reference_list::<4>(process, offsets, at)
+            .unwrap();
+        assert_eq!(
+            read.as_slice(),
+            [Address::new(BASE + 0x1080), Address::NULL]
+        );
     });
 }
 
