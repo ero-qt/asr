@@ -33,7 +33,7 @@ mod readers_tests;
 #[cfg(all(test, not(target_family = "wasm")))]
 mod walk_tests;
 
-pub use super::managed::{DictionaryOffsets, ListOffsets};
+pub use super::managed::{DictionaryOffsets, HashSetOffsets, ListOffsets};
 use super::{managed, BinaryFormat};
 
 /// Represents access to a Unity game that is using the standard Mono backend.
@@ -408,6 +408,37 @@ impl Module {
         self.walk().dictionary_offsets(process, object)
     }
 
+    /// Resolves where a `HashSet` keeps its backing slots, live count, and
+    /// high-water mark, and how one slot lays out, off the class the set
+    /// object at the given address names as its own. The answer is a small
+    /// `Copy` value worth storing, like a field offset. An object whose
+    /// class is not this shape, and a target still starting up, both miss.
+    pub fn get_hash_set_offsets(&self, process: &Process, at: Address) -> Option<HashSetOffsets> {
+        let object = process
+            .read_pointer(at, self.pointer_size)
+            .ok()
+            .filter(|address| !address.is_null())?;
+
+        self.walk().hash_set_offsets(process, object)
+    }
+
+    /// Reads a managed `HashSet`'s live values through the reference stored
+    /// at the given address, with the offsets
+    /// [`get_hash_set_offsets`](Self::get_hash_set_offsets) resolved. The
+    /// walk runs to the high-water mark rather than the live count, since
+    /// freed slots sit inside it; `N` bounds the live values, and the live
+    /// tally has to balance against the count exactly or the read fails. The
+    /// value type is the caller's claim, as with
+    /// [`read_array`](Self::read_array).
+    pub fn read_hash_set<T: CheckedBitPattern, const N: usize>(
+        &self,
+        process: &Process,
+        offsets: HashSetOffsets,
+        at: Address,
+    ) -> Result<ArrayVec<T, N>, Error> {
+        managed::read_hash_set(process, self.pointer_size, offsets, at)
+    }
+
     /// Reads a managed `Dictionary`'s live pairs through the reference
     /// stored at the given address, with the offsets
     /// [`get_dictionary_offsets`](Self::get_dictionary_offsets) resolved.
@@ -517,5 +548,20 @@ impl Module {
         at: Address,
     ) -> DictionaryOffsets {
         retry(|| self.get_dictionary_offsets(process, at)).await
+    }
+
+    /// Resolves where a `HashSet` keeps its backing slots, live count, and
+    /// high-water mark, and how one slot lays out, off the class the set
+    /// object at the given address names as its own.
+    ///
+    /// This is the `await`able version of the
+    /// [`get_hash_set_offsets`](Self::get_hash_set_offsets) function,
+    /// yielding back to the runtime between each try.
+    pub async fn wait_get_hash_set_offsets(
+        &self,
+        process: &Process,
+        at: Address,
+    ) -> HashSetOffsets {
+        retry(|| self.get_hash_set_offsets(process, at)).await
     }
 }

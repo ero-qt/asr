@@ -61,7 +61,7 @@ fn object(image: &mut [u8], at: u64, vtable: u64, class: u64) {
 }
 
 fn image() -> Vec<u8> {
-    let mut i = vec![0; 0x2800];
+    let mut i = vec![0; 0x3000];
 
     let strings = [
         (0x2000, "_buckets"),
@@ -80,6 +80,12 @@ fn image() -> Vec<u8> {
         (0x2340, "linkSlots"),
         (0x2380, "keySlots"),
         (0x23C0, "valueSlots"),
+        (0x2400, "_slots"),
+        (0x2440, "_lastIndex"),
+        (0x2480, "m_slots"),
+        (0x24C0, "m_buckets"),
+        (0x2500, "m_count"),
+        (0x2540, "m_lastIndex"),
     ];
     for (at, text) in strings {
         put(&mut i, at, text.as_bytes());
@@ -94,6 +100,9 @@ fn image() -> Vec<u8> {
     ptr(&mut i, 0x10, BASE + 0xB00);
     ptr(&mut i, 0x18, BASE + 0xB80);
     ptr(&mut i, 0x20, BASE + 0x1A00);
+    ptr(&mut i, 0x28, BASE + 0x2600);
+    ptr(&mut i, 0x30, BASE + 0x2A00);
+    ptr(&mut i, 0x38, BASE + 0x2D00);
 
     // The healthy dictionary in the modern naming generation: its entries
     // field's type is a SzArray whose data names the entry class directly.
@@ -149,6 +158,36 @@ fn image() -> Vec<u8> {
     entry(&mut i, 0x1E30, -1, -1, 0, 0);
     entry(&mut i, 0x1E40, 2222, -1, 3, 4);
     entry(&mut i, 0x1E50, 0, 0, 0, 0);
+
+    // A hash set in each naming generation, sharing the entry class as its
+    // slot class (a slot is an entry without the key claim) and one slots
+    // array: two live values around a freed slot, the high-water mark past
+    // the live count.
+    let set_names = [BASE + 0x2000, BASE + 0x2400, BASE + 0x2080, BASE + 0x2440];
+    object(&mut i, 0x2600, 0x2640, 0x2700);
+    dictionary_class(&mut i, 0x2700, 0x2840, set_names, BASE + 0x500);
+    ptr(&mut i, 0x2618, BASE + 0x2900);
+    put(&mut i, 0x2620, &2_i32.to_le_bytes());
+    put(&mut i, 0x2624, &3_i32.to_le_bytes());
+    put(&mut i, 0x2918, &4_u32.to_le_bytes());
+    entry(&mut i, 0x2920, 111, -1, 0, 7);
+    entry(&mut i, 0x2930, -1, -1, 0, 0);
+    entry(&mut i, 0x2940, 222, -1, 0, 9);
+    entry(&mut i, 0x2950, 0, 0, 0, 0);
+
+    let m_names = [BASE + 0x24C0, BASE + 0x2480, BASE + 0x2500, BASE + 0x2540];
+    object(&mut i, 0x2A00, 0x2A40, 0x2B00);
+    dictionary_class(&mut i, 0x2B00, 0x2C40, m_names, BASE + 0x500);
+    ptr(&mut i, 0x2A18, BASE + 0x2900);
+    put(&mut i, 0x2A20, &2_i32.to_le_bytes());
+    put(&mut i, 0x2A24, &3_i32.to_le_bytes());
+
+    // A hash set claiming three live values over the same two: its tally
+    // cannot balance.
+    object(&mut i, 0x2D00, 0x2D40, 0x2700);
+    ptr(&mut i, 0x2D18, BASE + 0x2900);
+    put(&mut i, 0x2D20, &3_i32.to_le_bytes());
+    put(&mut i, 0x2D24, &3_i32.to_le_bytes());
 
     i
 }
@@ -278,6 +317,48 @@ fn unbalanced_tallies_refuse() {
         let offsets = module.get_dictionary_offsets(process, slot).unwrap();
         assert!(module
             .read_dictionary::<i32, i32, 8>(process, offsets, slot)
+            .is_err());
+    });
+}
+
+#[test]
+fn hash_sets_resolve_in_both_naming_generations() {
+    on_fixture(|process, module| {
+        for at in [BASE + 0x28, BASE + 0x30] {
+            let slot = Address::new(at);
+            let offsets = module.get_hash_set_offsets(process, slot).unwrap();
+            assert_eq!(offsets.slots, 0x18);
+            assert_eq!(offsets.count, 0x20);
+            assert_eq!(offsets.last_index, 0x24);
+            assert_eq!(offsets.layout.stride, 0x10);
+            assert_eq!(offsets.layout.hash, 0x0);
+            assert_eq!(offsets.layout.next, 0x4);
+            assert_eq!(offsets.layout.value, 0xC);
+        }
+    });
+}
+
+// The walk runs to the high-water mark, not the live count, skipping the
+// freed slot inside it.
+#[test]
+fn hash_sets_read_their_live_values() {
+    on_fixture(|process, module| {
+        let slot = Address::new(BASE + 0x28);
+        let offsets = module.get_hash_set_offsets(process, slot).unwrap();
+        let values = module
+            .read_hash_set::<i32, 8>(process, offsets, slot)
+            .unwrap();
+        assert_eq!(values.as_slice(), [7, 9]);
+    });
+}
+
+#[test]
+fn unbalanced_set_tallies_refuse() {
+    on_fixture(|process, module| {
+        let slot = Address::new(BASE + 0x38);
+        let offsets = module.get_hash_set_offsets(process, slot).unwrap();
+        assert!(module
+            .read_hash_set::<i32, 8>(process, offsets, slot)
             .is_err());
     });
 }
