@@ -1,3 +1,7 @@
+use arrayvec::ArrayVec;
+use bytemuck::CheckedBitPattern;
+use core::mem::MaybeUninit;
+
 use crate::{string::ArrayWString, Address, Error, PointerSize, Process};
 
 /// How many bytes a managed object's two header words occupy. The readers
@@ -37,4 +41,43 @@ pub fn read_string<const N: usize>(
     process.read_into_slice(object + header + 4, characters)?;
 
     Ok(string)
+}
+
+/// Reads a managed array of value elements through the reference stored at
+/// the given address. The layout is runtime ABI: past the object header sit
+/// the bounds word, the length, and the elements inline.
+pub fn read_array<T: CheckedBitPattern, const N: usize>(
+    process: &Process,
+    pointer_size: PointerSize,
+    at: Address,
+) -> Result<ArrayVec<T, N>, Error> {
+    let object = process
+        .read_pointer(at, pointer_size)
+        .ok()
+        .filter(|address| !address.is_null())
+        .ok_or(Error {})?;
+
+    let header = object_header(pointer_size);
+
+    // The length judges at pointer width before any narrowing, so garbage
+    // that a narrower read would truncate small still refuses. Only IL2CPP's
+    // length is truly pointer-sized; 64-bit mono stores a u32 whose zeroed
+    // padding reads the same value through the wide slot.
+    let length = process
+        .read_pointer(object + header + pointer_size as u64, pointer_size)?
+        .value();
+    let length = usize::try_from(length)
+        .ok()
+        .filter(|&length| length <= N)
+        .ok_or(Error {})?;
+
+    let mut elements = [const { MaybeUninit::<T>::uninit() }; N];
+    let elements = process.read_into_uninit_slice(
+        object + header + 2 * pointer_size as u64,
+        &mut elements[..length],
+    )?;
+
+    let mut out = ArrayVec::new();
+    out.try_extend_from_slice(elements).map_err(|_| Error {})?;
+    Ok(out)
 }
