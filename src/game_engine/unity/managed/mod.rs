@@ -14,7 +14,7 @@ mod walk;
 
 pub use cursor::{Assemblies, Classes};
 pub use pointer::PointerPath;
-pub use readers::{read_array, read_string};
+pub use readers::{read_array, read_list, read_string, ListOffsets};
 pub use runtime::{Il2CppRuntime, MonoRuntime, Runtime};
 pub use walk::Walk;
 
