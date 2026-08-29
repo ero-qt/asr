@@ -27,11 +27,13 @@ pub use pointer::UnityPointer;
 mod offsets;
 use offsets::MonoOffsets;
 #[cfg(all(test, not(target_family = "wasm")))]
+mod collections_tests;
+#[cfg(all(test, not(target_family = "wasm")))]
 mod readers_tests;
 #[cfg(all(test, not(target_family = "wasm")))]
 mod walk_tests;
 
-pub use super::managed::ListOffsets;
+pub use super::managed::{DictionaryOffsets, ListOffsets};
 use super::{managed, BinaryFormat};
 
 /// Represents access to a Unity game that is using the standard Mono backend.
@@ -283,6 +285,8 @@ impl Module {
                 class_kind: self.offsets.class.class_kind,
                 generic_class: self.offsets.generic.generic_class,
                 container_class: self.offsets.generic.container_class,
+                type_data: self.offsets.type_words.data,
+                type_kind: self.offsets.type_words.kind,
                 runtime_info: self.offsets.class.runtime_info,
                 vtable_size: self.offsets.class.vtable_size.into(),
                 vtable: self.offsets.v_table.vtable.into(),
@@ -299,10 +303,12 @@ impl Module {
                     namespace: self.offsets.class.namespace.into(),
                     parent: self.offsets.class.parent.into(),
                     declaring: self.offsets.class.nested_in,
+                    instance_size: self.offsets.class.instance_size,
                     fields: self.offsets.class.fields.into(),
                 },
                 field: managed::FieldOffsets {
                     name: self.offsets.field.name.into(),
+                    type_: self.offsets.field.type_,
                     offset: self.offsets.field.offset.into(),
                     stride: self.offsets.field.alignment.into(),
                 },
@@ -382,6 +388,26 @@ impl Module {
         self.walk().list_offsets(process, object)
     }
 
+    /// Resolves where a `Dictionary` keeps its backing entries and live
+    /// counts, and how one entry lays out, off the class the dictionary
+    /// object at the given address names as its own. The answer is a small
+    /// `Copy` value worth storing, like a field offset: resolution walks
+    /// class metadata, where the read itself is a handful of reads. An
+    /// object whose class is not this dictionary shape, and a target still
+    /// starting up, both miss.
+    pub fn get_dictionary_offsets(
+        &self,
+        process: &Process,
+        at: Address,
+    ) -> Option<DictionaryOffsets> {
+        let object = process
+            .read_pointer(at, self.pointer_size)
+            .ok()
+            .filter(|address| !address.is_null())?;
+
+        self.walk().dictionary_offsets(process, object)
+    }
+
     /// Reads a managed `List` of value elements through the reference stored
     /// at the given address, with the offsets
     /// [`get_list_offsets`](Self::get_list_offsets) resolved. The list's
@@ -458,5 +484,20 @@ impl Module {
     /// to the runtime between each try.
     pub async fn wait_get_list_offsets(&self, process: &Process, at: Address) -> ListOffsets {
         retry(|| self.get_list_offsets(process, at)).await
+    }
+
+    /// Resolves where a `Dictionary` keeps its backing entries and live
+    /// counts, and how one entry lays out, off the class the dictionary
+    /// object at the given address names as its own.
+    ///
+    /// This is the `await`able version of the
+    /// [`get_dictionary_offsets`](Self::get_dictionary_offsets) function,
+    /// yielding back to the runtime between each try.
+    pub async fn wait_get_dictionary_offsets(
+        &self,
+        process: &Process,
+        at: Address,
+    ) -> DictionaryOffsets {
+        retry(|| self.get_dictionary_offsets(process, at)).await
     }
 }
