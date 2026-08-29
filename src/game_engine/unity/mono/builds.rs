@@ -3,7 +3,7 @@
 
 use super::offsets::{
     AssemblyOffsets, ClassOffsets, FieldInfoOffsets, GenericOffsets, HashTableOffsets,
-    ImageOffsets, MonoOffsets, MonoVTableOffsets,
+    ImageOffsets, MonoOffsets, MonoVTableOffsets, TypeOffsets,
 };
 use super::Version;
 use crate::{file_format::pe::DebugId, PointerSize};
@@ -91,6 +91,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1e),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -105,7 +106,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x94),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -133,6 +139,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0xf),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -147,7 +154,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x8c),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -176,6 +188,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x2a),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -190,7 +203,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -218,6 +236,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1b),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -232,7 +251,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -260,6 +284,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x2a),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -274,7 +299,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -302,6 +332,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: None,
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x50,
@@ -316,7 +347,12 @@ static BUILDS: &[Build] = &[
                 generic_class: None,
                 container_class: None,
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -344,6 +380,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1b),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -358,7 +395,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -386,6 +428,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1b),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -400,7 +443,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -428,6 +476,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1b),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -442,7 +491,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -470,6 +524,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1b),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -484,7 +539,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -512,6 +572,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: None,
+                instance_size: Some(0x10),
                 parent: 0x24,
                 nested_in: Some(0x28),
                 name: 0x34,
@@ -526,7 +587,12 @@ static BUILDS: &[Build] = &[
                 generic_class: None,
                 container_class: None,
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -555,6 +621,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: None,
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -569,7 +636,12 @@ static BUILDS: &[Build] = &[
                 generic_class: None,
                 container_class: None,
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -597,6 +669,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1e),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -611,7 +684,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x94),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -639,6 +717,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x2a),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -653,7 +732,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -681,6 +765,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: None,
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x50,
@@ -695,7 +780,12 @@ static BUILDS: &[Build] = &[
                 generic_class: None,
                 container_class: None,
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -723,6 +813,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0xf),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -737,7 +828,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x8c),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -765,6 +861,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: None,
+                instance_size: Some(0x10),
                 parent: 0x24,
                 nested_in: Some(0x28),
                 name: 0x34,
@@ -779,7 +876,12 @@ static BUILDS: &[Build] = &[
                 generic_class: None,
                 container_class: None,
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -807,6 +909,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0xf),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -821,7 +924,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x8c),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -849,6 +957,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1b),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -863,7 +972,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -891,6 +1005,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x2a),
+                instance_size: Some(0x1c),
                 parent: 0x30,
                 nested_in: Some(0x38),
                 name: 0x48,
@@ -905,7 +1020,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0xf0),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x8,
                 offset: 0x18,
                 alignment: 0x20,
@@ -933,6 +1053,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1e),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -947,7 +1068,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x94),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -977,6 +1103,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: None,
+                instance_size: Some(0x10),
                 parent: 0x24,
                 nested_in: Some(0x28),
                 name: 0x30,
@@ -991,7 +1118,12 @@ static BUILDS: &[Build] = &[
                 generic_class: None,
                 container_class: None,
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -1019,6 +1151,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0x1e),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -1033,7 +1166,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x94),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -1061,6 +1199,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0xf),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -1075,7 +1214,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x8c),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -1103,6 +1247,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0xf),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -1117,7 +1262,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x8c),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -1145,6 +1295,7 @@ static BUILDS: &[Build] = &[
             },
             class: ClassOffsets {
                 class_kind: Some(0xf),
+                instance_size: Some(0x10),
                 parent: 0x20,
                 nested_in: Some(0x24),
                 name: 0x2c,
@@ -1159,7 +1310,12 @@ static BUILDS: &[Build] = &[
                 generic_class: Some(0x8c),
                 container_class: Some(0x0),
             },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
+            },
             field: FieldInfoOffsets {
+                type_: Some(0x0),
                 name: 0x4,
                 offset: 0xc,
                 alignment: 0x10,
@@ -1269,6 +1425,13 @@ mod tests {
                 table.generic.container_class,
                 build.offsets.generic.container_class
             ));
+            assert!(agrees(
+                table.class.instance_size,
+                build.offsets.class.instance_size
+            ));
+            assert!(agrees(table.type_words.data, build.offsets.type_words.data));
+            assert!(agrees(table.type_words.kind, build.offsets.type_words.kind));
+            assert!(agrees(table.field.type_, build.offsets.field.type_));
         }
     }
 

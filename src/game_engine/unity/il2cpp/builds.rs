@@ -3,7 +3,8 @@
 //! with the offsets measured from their symbols.
 
 use super::offsets::{
-    AssemblyOffsets, ClassOffsets, FieldInfoOffsets, IL2CPPOffsets, ImageOffsets,
+    AssemblyOffsets, ClassOffsets, FieldInfoOffsets, GenericOffsets, IL2CPPOffsets, ImageOffsets,
+    TypeOffsets,
 };
 use super::Version;
 use crate::PointerSize;
@@ -60,10 +61,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xb8,
+                instance_size: Some(0xec),
                 field_count: 0x114,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -93,10 +103,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xb8,
+                instance_size: Some(0xf4),
                 field_count: 0x11c,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -125,10 +144,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xb8,
+                instance_size: Some(0xf4),
                 field_count: 0x11c,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -157,10 +185,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x2c,
                 fields: 0x40,
                 static_fields: 0x5c,
+                instance_size: Some(0x80),
                 field_count: 0xa8,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0xc),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x4),
                 offset: 0xc,
                 struct_size: 0x14,
             },
@@ -194,10 +231,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xb8,
+                instance_size: Some(0xf8),
                 field_count: 0x120,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -229,10 +275,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x2c,
                 fields: 0x40,
                 static_fields: 0x5c,
+                instance_size: Some(0x80),
                 field_count: 0xa8,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0xc),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x4),
                 offset: 0xc,
                 struct_size: 0x14,
             },
@@ -262,10 +317,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xb8,
+                instance_size: Some(0xf8),
                 field_count: 0x124,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -302,10 +366,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x2c,
                 fields: 0x40,
                 static_fields: 0x5c,
+                instance_size: Some(0x80),
                 field_count: 0xac,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0xc),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x4),
                 offset: 0xc,
                 struct_size: 0x14,
             },
@@ -334,10 +407,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xb8,
+                instance_size: Some(0xf8),
                 field_count: 0x124,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -366,10 +448,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x2c,
                 fields: 0x40,
                 static_fields: 0x5c,
+                instance_size: Some(0x80),
                 field_count: 0xac,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0xc),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x4),
                 offset: 0xc,
                 struct_size: 0x14,
             },
@@ -402,10 +493,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xb8,
+                instance_size: Some(0xf8),
                 field_count: 0x124,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -436,10 +536,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x2c,
                 fields: 0x40,
                 static_fields: 0x5c,
+                instance_size: Some(0x80),
                 field_count: 0xac,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0xc),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x4),
                 offset: 0xc,
                 struct_size: 0x14,
             },
@@ -469,10 +578,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0xa0,
+                instance_size: Some(0xf8),
                 field_count: 0x124,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x18),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -505,10 +623,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x2c,
                 fields: 0x40,
                 static_fields: 0x50,
+                instance_size: Some(0x80),
                 field_count: 0xac,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0xc),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x4),
                 offset: 0xc,
                 struct_size: 0x14,
             },
@@ -540,10 +667,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x58,
                 fields: 0x80,
                 static_fields: 0x98,
+                instance_size: Some(0xf0),
                 field_count: 0x11c,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x10),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0xa),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x8),
                 offset: 0x18,
                 struct_size: 0x20,
             },
@@ -577,10 +713,19 @@ static BUILDS: &[Build] = &[
                 parent: 0x2c,
                 fields: 0x40,
                 static_fields: 0x4c,
+                instance_size: Some(0x80),
                 field_count: 0xac,
+            },
+            generic: GenericOffsets {
+                cached_class: Some(0x8),
+            },
+            type_words: TypeOffsets {
+                data: Some(0x0),
+                kind: Some(0x6),
             },
             field: FieldInfoOffsets {
                 name: 0x0,
+                type_: Some(0x4),
                 offset: 0xc,
                 struct_size: 0x14,
             },
@@ -631,18 +776,33 @@ mod tests {
         assert!(find(24, (2018, 4), PointerSize::Bit32).is_none());
     }
 
-    // A version table's value for where a class keeps its declaring type
-    // must match every measured build it stands in for, or say nothing.
+    // A version table's value for any of the grown members must match every
+    // measured build it stands in for, or say nothing.
     #[test]
     fn version_tables_never_contradict_a_measured_build() {
+        fn agrees(table: Option<u16>, measured: Option<u16>) -> bool {
+            table.is_none() || table == measured
+        }
+
         for build in BUILDS {
             let Some(table) = IL2CPPOffsets::new(build.version, build.pointer_size) else {
                 continue;
             };
-            assert!(
-                table.class.declaring_type.is_none()
-                    || table.class.declaring_type == build.offsets.class.declaring_type
-            );
+            assert!(agrees(
+                table.class.declaring_type,
+                build.offsets.class.declaring_type
+            ));
+            assert!(agrees(
+                table.class.instance_size,
+                build.offsets.class.instance_size
+            ));
+            assert!(agrees(
+                table.generic.cached_class,
+                build.offsets.generic.cached_class
+            ));
+            assert!(agrees(table.type_words.data, build.offsets.type_words.data));
+            assert!(agrees(table.type_words.kind, build.offsets.type_words.kind));
+            assert!(agrees(table.field.type_, build.offsets.field.type_));
         }
     }
 
