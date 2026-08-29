@@ -18,6 +18,8 @@ pub use readers::{
     read_array, read_dictionary, read_hash_set, read_list, read_string, DictionaryOffsets,
     EntryLayout, HashSetOffsets, ListOffsets, SlotLayout,
 };
+#[cfg(test)]
+pub(crate) use readers::{DictionaryShape, SetShape};
 pub use runtime::{Il2CppRuntime, MonoRuntime, Runtime};
 pub use walk::Walk;
 
