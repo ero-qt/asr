@@ -19,6 +19,8 @@ use crate::{
 mod builds;
 mod image;
 mod linux_builds;
+#[cfg(feature = "alloc")]
+mod mac_builds;
 pub use image::Image;
 mod class;
 pub use class::Class;
@@ -53,6 +55,8 @@ pub struct Module {
 enum Identity {
     Debug(pe::DebugId),
     Build(elf::BuildId, &'static str),
+    #[cfg(feature = "alloc")]
+    Uuid(macho::Uuid),
 }
 
 impl Identity {
@@ -63,11 +67,12 @@ impl Identity {
     /// another file's offsets.
     fn read(
         process: &Process,
-        runtime: (Address, &'static str),
+        runtime: ((Address, u64), &'static str),
         player: Option<Address>,
         format: BinaryFormat,
     ) -> Option<Self> {
-        let (runtime, runtime_name) = runtime;
+        let (runtime_range, runtime_name) = runtime;
+        let runtime = runtime_range.0;
 
         match format {
             BinaryFormat::PE => pe::DebugId::read(process, runtime).map(Self::Debug),
@@ -78,6 +83,8 @@ impl Identity {
                     "UnityPlayer.so",
                 )),
             },
+            #[cfg(feature = "alloc")]
+            BinaryFormat::MachO => macho::uuid(process, runtime_range).map(Self::Uuid),
             #[allow(unreachable_patterns)]
             _ => None,
         }
@@ -93,6 +100,10 @@ impl Identity {
             Self::Build(build_id, _) => linux_builds::find(build_id.as_bytes())
                 .filter(|build| build.pointer_size == pointer_size)
                 .map(|build| (build.version, build.offsets)),
+            #[cfg(feature = "alloc")]
+            Self::Uuid(uuid) => mac_builds::find(&uuid.bytes)
+                .filter(|build| build.pointer_size == pointer_size)
+                .map(|build| (build.version, build.offsets)),
         }
     }
 }
@@ -102,6 +113,8 @@ impl fmt::Debug for Identity {
         match self {
             Self::Debug(debug_id) => write!(f, "{debug_id:?}"),
             Self::Build(build_id, module) => write!(f, "{build_id:?} in {module}"),
+            #[cfg(feature = "alloc")]
+            Self::Uuid(uuid) => write!(f, "{uuid:?}"),
         }
     }
 }
@@ -122,7 +135,7 @@ impl Module {
             BinaryFormat::ELF => process.get_module_address("UnityPlayer.so").ok(),
             _ => None,
         };
-        let identity = Identity::read(process, (module_range.0, name), player, format);
+        let identity = Identity::read(process, (module_range, name), player, format);
 
         if let Some(identity) = &identity {
             if let Some((version, offsets)) = identity.find(pointer_size) {

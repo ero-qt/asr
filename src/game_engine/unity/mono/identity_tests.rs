@@ -65,7 +65,7 @@ fn on_modules(runtime: Option<&[u8]>, player: Option<&[u8]>, test: impl FnOnce(&
 fn read(process: &Process, player: bool) -> Option<Identity> {
     Identity::read(
         process,
-        (Address::new(RUNTIME), "libmonobdwgc-2.0.so"),
+        ((Address::new(RUNTIME), 0x400), "libmonobdwgc-2.0.so"),
         player.then(|| Address::new(PLAYER)),
         BinaryFormat::ELF,
     )
