@@ -1182,10 +1182,10 @@ impl fmt::Debug for BuildId {
     }
 }
 
-/// Reads the GNU build ID from the notes of the ELF module starting at the
-/// given address. Returns [`None`] if the module carries no such note, which
-/// not every module does. Only little-endian ELFs are supported.
-pub fn build_id(process: &Process, module_address: Address) -> Option<BuildId> {
+/// Reads the GNU build ID from the notes of the ELF module in the given
+/// range. Returns [`None`] if the module carries no such note, which not
+/// every module does. Only little-endian ELFs are supported.
+pub fn build_id(process: &Process, range: (Address, u64)) -> Option<BuildId> {
     #[derive(Debug, Copy, Clone, Pod, Zeroable)]
     #[repr(C)]
     struct NoteHeader {
@@ -1196,6 +1196,7 @@ pub fn build_id(process: &Process, module_address: Address) -> Option<BuildId> {
 
     const NT_GNU_BUILD_ID: u32 = 3;
 
+    let (module_address, module_size) = range;
     let header = process.read::<Header>(module_address).ok()?;
     let info = Info::parse(bytemuck::bytes_of(&header))?;
 
@@ -1215,64 +1216,85 @@ pub fn build_id(process: &Process, module_address: Address) -> Option<BuildId> {
         )
     };
 
-    (0..e_phnum).find_map(|index| {
+    let program_header = |index: u16| {
         let at = module_address + e_phoff + e_phentsize.wrapping_mul(index as u64);
-
-        let (p_type, p_vaddr, p_filesz) = if info.bitness.is_64() {
-            let program_header = process.read::<ProgramHeader64>(at).ok()?;
-            (
-                program_header.p_type,
-                program_header.p_vaddr,
-                program_header.p_filesz,
-            )
+        if info.bitness.is_64() {
+            let header = process.read::<ProgramHeader64>(at).ok()?;
+            Some((
+                header.p_type,
+                header.p_offset,
+                header.p_vaddr,
+                header.p_filesz,
+            ))
         } else {
-            let program_header = process.read::<ProgramHeader32>(at).ok()?;
-            (
-                program_header.p_type,
-                program_header.p_vaddr as u64,
-                program_header.p_filesz as u64,
-            )
-        };
-
-        if SegmentType(p_type) != SegmentType::PT_NOTE {
-            return None;
+            let header = process.read::<ProgramHeader32>(at).ok()?;
+            Some((
+                header.p_type,
+                header.p_offset as u64,
+                header.p_vaddr as u64,
+                header.p_filesz as u64,
+            ))
         }
+    };
 
-        // A note is its header, the name, then the data, the latter two padded
-        // to four bytes.
-        let segment = module_address + p_vaddr;
-        let mut offset = 0;
-        // The walk is bounded so corrupt sizes can't turn it into a scan.
-        for _ in 0..0x10 {
-            if offset + size_of::<NoteHeader>() as u64 > p_filesz {
+    // A shared object's addresses count from wherever it landed, and an
+    // executable's are absolute. Either way the load segment at file offset
+    // zero holds this header, and the module address is where that segment
+    // landed, so the difference between the two is what every other address
+    // needs added.
+    let header_vaddr = (0..e_phnum)
+        .filter_map(program_header)
+        .find(|&(p_type, p_offset, ..)| {
+            SegmentType(p_type) == SegmentType::PT_LOAD && p_offset == 0
+        })
+        .map(|(_, _, p_vaddr, _)| p_vaddr)?;
+    let bias = module_address.value().wrapping_sub(header_vaddr);
+    let module_end = module_address.value().saturating_add(module_size);
+
+    (0..e_phnum)
+        .filter_map(program_header)
+        .find_map(|(p_type, _, p_vaddr, p_filesz)| {
+            if SegmentType(p_type) != SegmentType::PT_NOTE {
                 return None;
             }
 
-            let note = process.read::<NoteHeader>(segment + offset).ok()?;
-            let name = offset + size_of::<NoteHeader>() as u64;
-            let desc = name + (note.n_namesz as u64).next_multiple_of(4);
+            // The segment has to lie inside the module, which is what bounds
+            // the walk.
+            let segment = bias.wrapping_add(p_vaddr);
+            if segment < module_address.value() || segment.checked_add(p_filesz)? > module_end {
+                return None;
+            }
+            let segment = Address::new(segment);
 
-            if note.n_type == NT_GNU_BUILD_ID
-                && note.n_namesz == 4
-                && (1..=32).contains(&note.n_descsz)
-                && desc + note.n_descsz as u64 <= p_filesz
-                && process.read::<[u8; 4]>(segment + name).ok()? == *b"GNU\0"
-            {
-                let mut bytes = [0; 32];
-                process
-                    .read_into_buf(segment + desc, &mut bytes[..note.n_descsz as usize])
-                    .ok()?;
-                return Some(BuildId {
-                    bytes,
-                    len: note.n_descsz as u8,
-                });
+            // A note is its header, the name, then the data, the latter two
+            // padded to four bytes.
+            let mut offset = 0;
+            while offset + size_of::<NoteHeader>() as u64 <= p_filesz {
+                let note = process.read::<NoteHeader>(segment + offset).ok()?;
+                let name = offset + size_of::<NoteHeader>() as u64;
+                let desc = name + (note.n_namesz as u64).next_multiple_of(4);
+
+                if note.n_type == NT_GNU_BUILD_ID
+                    && note.n_namesz == 4
+                    && (1..=32).contains(&note.n_descsz)
+                    && desc + note.n_descsz as u64 <= p_filesz
+                    && process.read::<[u8; 4]>(segment + name).ok()? == *b"GNU\0"
+                {
+                    let mut bytes = [0; 32];
+                    process
+                        .read_into_buf(segment + desc, &mut bytes[..note.n_descsz as usize])
+                        .ok()?;
+                    return Some(BuildId {
+                        bytes,
+                        len: note.n_descsz as u8,
+                    });
+                }
+
+                offset = desc + (note.n_descsz as u64).next_multiple_of(4);
             }
 
-            offset = desc + (note.n_descsz as u64).next_multiple_of(4);
-        }
-
-        None
-    })
+            None
+        })
 }
 
 #[cfg(all(test, not(target_family = "wasm")))]
@@ -1338,7 +1360,7 @@ mod tests {
     fn reads_the_build_id_from_a_mapped_image() {
         for wide in [true, false] {
             with_process(&[(BASE, &image(wide))], |process| {
-                let build_id = build_id(process, BASE.into()).unwrap();
+                let build_id = build_id(process, (BASE.into(), 0x400)).unwrap();
                 assert_eq!(build_id.as_bytes(), BUILD_ID);
             });
         }
@@ -1347,7 +1369,7 @@ mod tests {
     #[test]
     fn renders_the_id_as_hex() {
         with_process(&[(BASE, &image(true))], |process| {
-            let build_id = build_id(process, BASE.into()).unwrap();
+            let build_id = build_id(process, (BASE.into(), 0x400)).unwrap();
             assert_eq!(
                 format!("{build_id:?}"),
                 "e6aa000a9a5201635743c6a1b2781e057d651dad",
@@ -1360,7 +1382,49 @@ mod tests {
         let mut image = image(true);
         put(&mut image, 0x78, &0_u32.to_le_bytes());
         with_process(&[(BASE, &image)], |process| {
-            assert!(build_id(process, BASE.into()).is_none());
+            assert!(build_id(process, (BASE.into(), 0x400)).is_none());
+        });
+    }
+
+    // An executable's segments carry absolute addresses, and one built without
+    // position independence is mapped exactly where they say.
+    #[test]
+    fn reads_the_build_id_from_an_executable_mapped_at_its_own_address() {
+        const EXECUTABLE_BASE: u64 = 0x40_0000;
+        let mut image = image(true);
+        put(&mut image, 0x10, &2_u16.to_le_bytes());
+        put(&mut image, 0x50, &EXECUTABLE_BASE.to_le_bytes());
+        put(&mut image, 0x88, &(EXECUTABLE_BASE + 0x200).to_le_bytes());
+        with_process(&[(EXECUTABLE_BASE, &image)], |process| {
+            let build_id = build_id(process, (EXECUTABLE_BASE.into(), 0x400)).unwrap();
+            assert_eq!(build_id.as_bytes(), BUILD_ID);
+        });
+    }
+
+    #[test]
+    fn answers_nothing_when_the_note_segment_overruns_the_module() {
+        let mut image = image(true);
+        put(&mut image, 0x98, &0x1000_u64.to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            assert!(build_id(process, (BASE.into(), 0x400)).is_none());
+        });
+    }
+
+    #[test]
+    fn reads_a_build_id_past_the_sixteenth_note() {
+        let mut image = image(true);
+        // Seventeen empty notes ahead of the build ID, all in one segment.
+        put(&mut image, 0x200, &[0; 0x44]);
+        let at = 0x200 + 17 * 12;
+        put(&mut image, at, &4_u32.to_le_bytes());
+        put(&mut image, at + 4, &20_u32.to_le_bytes());
+        put(&mut image, at + 8, &3_u32.to_le_bytes());
+        put(&mut image, at + 12, b"GNU\0");
+        put(&mut image, at + 16, &BUILD_ID);
+        put(&mut image, 0x98, &((at + 36 - 0x200) as u64).to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            let build_id = build_id(process, (BASE.into(), 0x400)).unwrap();
+            assert_eq!(build_id.as_bytes(), BUILD_ID);
         });
     }
 }
