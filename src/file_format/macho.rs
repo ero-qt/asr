@@ -103,7 +103,8 @@ impl fmt::Debug for Uuid {
 
 /// Reads the UUID from the load commands of the Mach-O module in the given
 /// range. Returns [`None`] if the module carries no `LC_UUID` command, or is
-/// big-endian, which only PowerPC images ever were.
+/// 32-bit or big-endian. macOS has not run 32-bit software since 2019, and
+/// Unity dropped PowerPC, the only big-endian Mac, with Unity 3.
 pub fn uuid(process: &Process, range: (Address, u64)) -> Option<Uuid> {
     #[derive(Debug, Copy, Clone, Zeroable, Pod)]
     #[repr(C)]
@@ -127,15 +128,13 @@ pub fn uuid(process: &Process, range: (Address, u64)) -> Option<Uuid> {
     let page = scan_macho_page(process, range)?;
     let header = process.read::<MachHeader>(page).ok()?;
 
-    // The 64-bit header ends with one reserved field the 32-bit one lacks. A
-    // swapped magic is a big-endian image, and nothing here decodes swapped
-    // fields.
-    let commands = page
-        + match header.magic {
-            MH_MAGIC_64 => mem::size_of::<MachHeader>() + mem::size_of::<u32>(),
-            MH_MAGIC_32 => mem::size_of::<MachHeader>(),
-            _ => return None,
-        } as u64;
+    // Anything but the 64-bit little-endian magic is 32-bit or big-endian,
+    // and nothing here decodes either. The 64-bit header ends with one
+    // reserved field.
+    if header.magic != MH_MAGIC_64 {
+        return None;
+    }
+    let commands = page + (mem::size_of::<MachHeader>() + mem::size_of::<u32>()) as u64;
 
     // The command table has to lie inside the module, which is what bounds
     // the walk.
@@ -328,13 +327,12 @@ mod tests {
     // walk is checked against the format rather than against itself: the
     // header declaring its command table, a segment command, and the uuid
     // command.
-    fn image(wide: bool) -> Vec<u8> {
+    fn image() -> Vec<u8> {
         let mut image = vec![0; 0x1000];
-        let magic: u32 = if wide { 0xFEEDFACF } else { 0xFEEDFACE };
-        put(&mut image, 0x00, &magic.to_le_bytes());
+        put(&mut image, 0x00, &0xFEEDFACF_u32.to_le_bytes());
         put(&mut image, 0x10, &2_u32.to_le_bytes());
         put(&mut image, 0x14, &(0x48 + 24_u32).to_le_bytes());
-        let commands = if wide { 0x20 } else { 0x1C };
+        let commands = 0x20;
         put(&mut image, commands, &0x19_u32.to_le_bytes());
         put(&mut image, commands + 0x4, &0x48_u32.to_le_bytes());
         put(&mut image, commands + 0x48, &0x1B_u32.to_le_bytes());
@@ -345,17 +343,24 @@ mod tests {
 
     #[test]
     fn reads_the_uuid_from_a_mapped_image() {
-        for wide in [true, false] {
-            with_process(&[(BASE, &image(wide))], |process| {
-                let uuid = uuid(process, (BASE.into(), 0x1000)).unwrap();
-                assert_eq!(uuid.bytes, UUID);
-            });
-        }
+        with_process(&[(BASE, &image())], |process| {
+            let uuid = uuid(process, (BASE.into(), 0x1000)).unwrap();
+            assert_eq!(uuid.bytes, UUID);
+        });
+    }
+
+    #[test]
+    fn answers_nothing_for_a_32_bit_image() {
+        let mut image = image();
+        put(&mut image, 0x00, &0xFEEDFACE_u32.to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            assert!(uuid(process, (BASE.into(), 0x1000)).is_none());
+        });
     }
 
     #[test]
     fn renders_the_uuid_canonically() {
-        with_process(&[(BASE, &image(true))], |process| {
+        with_process(&[(BASE, &image())], |process| {
             let uuid = uuid(process, (BASE.into(), 0x1000)).unwrap();
             assert_eq!(format!("{uuid:?}"), "e7420bc7-a26b-33fa-b5cd-41cad7d4614c");
         });
@@ -363,7 +368,7 @@ mod tests {
 
     #[test]
     fn answers_nothing_without_a_uuid_command() {
-        let mut image = image(true);
+        let mut image = image();
         put(&mut image, 0x20 + 0x48, &0_u32.to_le_bytes());
         with_process(&[(BASE, &image)], |process| {
             assert!(uuid(process, (BASE.into(), 0x1000)).is_none());
@@ -372,7 +377,7 @@ mod tests {
 
     #[test]
     fn answers_nothing_when_the_commands_overrun_the_module() {
-        let mut image = image(true);
+        let mut image = image();
         put(&mut image, 0x14, &0x2000_u32.to_le_bytes());
         with_process(&[(BASE, &image)], |process| {
             assert!(uuid(process, (BASE.into(), 0x1000)).is_none());
@@ -402,7 +407,7 @@ mod tests {
 
     #[test]
     fn answers_nothing_for_a_big_endian_image() {
-        let mut image = image(true);
+        let mut image = image();
         put(&mut image, 0x00, &0xFEEDFACF_u32.to_be_bytes());
         with_process(&[(BASE, &image)], |process| {
             assert!(uuid(process, (BASE.into(), 0x1000)).is_none());
