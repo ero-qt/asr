@@ -6,6 +6,9 @@ use core::mem;
 #[cfg(feature = "derive")]
 pub use asr_derive::Gui;
 
+#[cfg(feature = "alloc")]
+use alloc::borrow::ToOwned;
+
 use crate::{runtime::sys, watcher::Pair};
 
 use super::map::Map;
@@ -162,6 +165,26 @@ pub fn add_file_select_mime_filter(key: &str, mime_type: &str) {
             key.len(),
             mime_type.as_ptr(),
             mime_type.len(),
+        )
+    }
+}
+
+/// Adds a new text input setting widget that the user can modify. The key is
+/// used to store the text in the settings [`Map`](super::Map) and needs to be
+/// unique across all types of settings. The description is what's shown to the
+/// user. The default value is used when the user hasn't set a value yet.
+#[inline]
+pub fn add_text_input(key: &str, description: &str, default_value: &str) {
+    // SAFETY: We provide valid pointers and lengths to key, description and
+    // default_value. They are also guaranteed to be valid UTF-8 strings.
+    unsafe {
+        sys::user_settings_add_text_input(
+            key.as_ptr(),
+            key.len(),
+            description.as_ptr(),
+            description.len(),
+            default_value.as_ptr(),
+            default_value.len(),
         )
     }
 }
@@ -354,6 +377,68 @@ impl Widget for FileSelect {
             value.get_string_into(&mut self.path);
         } else {
             self.path.clear();
+        }
+    }
+}
+
+/// A text input widget.
+///
+/// This is useful for settings where the user needs to enter arbitrary text,
+/// such as a scene or level name to split on.
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Gui)]
+/// struct Settings {
+///     /// Screen Name
+///     ///
+///     /// Split when entering a scene with this name.
+///     #[default = "prologue"]
+///     level_name: TextInput,
+/// }
+///
+/// // In your auto splitter:
+/// if current_scene == settings.level_name.value {
+///     timer::split();
+/// }
+/// ```
+#[derive(Clone, PartialEq, Eq)]
+#[cfg(feature = "alloc")]
+pub struct TextInput {
+    /// The text entered by the user, or the default if they haven't changed it.
+    pub value: alloc::string::String,
+}
+
+/// The arguments that are needed to register a text input widget. This is an
+/// internal type that you don't need to worry about.
+#[cfg(feature = "alloc")]
+#[doc(hidden)]
+#[derive(Default)]
+#[non_exhaustive]
+pub struct TextInputArgs {
+    /// The default value of the setting, in case the user didn't set it yet.
+    pub default: &'static str,
+}
+
+#[cfg(feature = "alloc")]
+impl Widget for TextInput {
+    type Args = TextInputArgs;
+
+    fn register(key: &str, description: &str, args: Self::Args) -> Self {
+        add_text_input(key, description, args.default);
+        let mut this = TextInput {
+            value: alloc::string::String::new(),
+        };
+        this.update_from(&Map::load(), key, args);
+        this
+    }
+
+    fn update_from(&mut self, settings_map: &Map, key: &str, args: Self::Args) {
+        if let Some(value) = settings_map.get(key) {
+            value.get_string_into(&mut self.value);
+        } else {
+            args.default.clone_into(&mut self.value);
         }
     }
 }
