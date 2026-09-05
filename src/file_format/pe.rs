@@ -621,56 +621,83 @@ impl DebugId {
 
         let optional_header_address = coff_header_address + mem::size_of::<COFFHeader>() as u64;
 
-        let (optional_header_size, directory) =
+        let (directories_at, directory_count, size_of_image, directory) =
             match process.read::<u16>(optional_header_address).ok()? {
-                OPTIONAL_HEADER_MAGIC_PE32 => (
-                    mem::size_of::<OptionalHeader32>(),
-                    process
+                OPTIONAL_HEADER_MAGIC_PE32 => {
+                    let header = process
                         .read::<OptionalHeader32>(optional_header_address)
-                        .ok()?
-                        .data_directories[IMAGE_DIRECTORY_ENTRY_DEBUG],
-                ),
-                OPTIONAL_HEADER_MAGIC_PE32_PLUS => (
-                    mem::size_of::<OptionalHeader64>(),
-                    process
+                        .ok()?;
+                    (
+                        mem::offset_of!(OptionalHeader32, data_directories),
+                        header.number_of_rva_and_sizes,
+                        header.size_of_image,
+                        header.data_directories[IMAGE_DIRECTORY_ENTRY_DEBUG],
+                    )
+                }
+                OPTIONAL_HEADER_MAGIC_PE32_PLUS => {
+                    let header = process
                         .read::<OptionalHeader64>(optional_header_address)
-                        .ok()?
-                        .data_directories[IMAGE_DIRECTORY_ENTRY_DEBUG],
-                ),
+                        .ok()?;
+                    (
+                        mem::offset_of!(OptionalHeader64, data_directories),
+                        header.number_of_rva_and_sizes,
+                        header.size_of_image,
+                        header.data_directories[IMAGE_DIRECTORY_ENTRY_DEBUG],
+                    )
+                }
                 _ => return None,
             };
 
-        if (coff_header.size_of_optional_header as usize) < optional_header_size {
+        // The directories close the optional header, and an image declares how
+        // many it has, so the debug slot exists only when both that count and
+        // the header's declared size reach it.
+        let debug_slot_end =
+            directories_at + (IMAGE_DIRECTORY_ENTRY_DEBUG + 1) * mem::size_of::<DataDirectory>();
+        if directory_count as usize <= IMAGE_DIRECTORY_ENTRY_DEBUG
+            || (coff_header.size_of_optional_header as usize) < debug_slot_end
+        {
             return None;
         }
 
-        let directory = Some(directory)
-            .filter(|directory| directory.virtual_address != 0 && directory.size != 0)?;
+        if directory.virtual_address == 0 || directory.size == 0 {
+            return None;
+        }
+
+        // Everything the walk touches has to lie inside the image, which is
+        // what bounds it.
+        let inside = |offset: u32, size: u32| offset as u64 + size as u64 <= size_of_image as u64;
+        if !inside(directory.virtual_address, directory.size) {
+            return None;
+        }
 
         let entries = directory.size as usize / mem::size_of::<DebugDirectoryEntry>();
-
-        // The walk is bounded so a corrupt entry count can't turn it into a scan.
-        (0..entries.min(0x10)).find_map(|i| {
-            let entry = process
-                .read::<DebugDirectoryEntry>(
-                    address
-                        + directory.virtual_address
-                        + (i * mem::size_of::<DebugDirectoryEntry>()) as u64,
-                )
-                .ok()
-                .filter(|entry| {
-                    entry.debug_type == IMAGE_DEBUG_TYPE_CODEVIEW && entry.address_of_raw_data != 0
-                })?;
-
-            process
-                .read::<CodeView70>(address + entry.address_of_raw_data)
-                .ok()
-                .filter(|codeview| codeview.signature == *b"RSDS")
-                .map(|codeview| Self {
-                    guid: codeview.guid,
-                    age: codeview.age,
-                })
-        })
+        (0..entries)
+            .map_while(|i| {
+                // The table is contiguous, so an entry that can't be read ends it.
+                process
+                    .read::<DebugDirectoryEntry>(
+                        address
+                            + directory.virtual_address
+                            + (i * mem::size_of::<DebugDirectoryEntry>()) as u64,
+                    )
+                    .ok()
+            })
+            .filter(|entry| {
+                entry.debug_type == IMAGE_DEBUG_TYPE_CODEVIEW
+                    && entry.address_of_raw_data != 0
+                    && entry.size_of_data as usize >= mem::size_of::<CodeView70>()
+                    && inside(entry.address_of_raw_data, entry.size_of_data)
+            })
+            .find_map(|entry| {
+                process
+                    .read::<CodeView70>(address + entry.address_of_raw_data)
+                    .ok()
+                    .filter(|codeview| codeview.signature == *b"RSDS")
+                    .map(|codeview| Self {
+                        guid: codeview.guid,
+                        age: codeview.age,
+                    })
+            })
     }
 }
 
@@ -712,8 +739,9 @@ mod tests {
 
     // Builds a minimal mapped PE image by hand from the spec, so the walk is
     // checked against the format rather than against itself: headers at the
-    // base, a two-entry debug directory with the CodeView entry second, and
-    // the PDB 7.0 record it points at.
+    // base declaring the image size and all sixteen directories, a two-entry
+    // debug directory with the CodeView entry second, and the PDB 7.0 record
+    // it points at.
     fn image(wide: bool) -> Vec<u8> {
         let mut image = vec![0; 0x400];
         put(&mut image, 0x00, b"MZ");
@@ -723,7 +751,10 @@ mod tests {
         put(&mut image, 0x94, &size_of_optional_header.to_le_bytes());
         let magic: u16 = if wide { 0x20B } else { 0x10B };
         put(&mut image, 0x98, &magic.to_le_bytes());
-        let debug_dd_at = 0x98 + if wide { 0xA0 } else { 0x90 };
+        put(&mut image, 0x98 + 0x38, &0x400_u32.to_le_bytes());
+        let directories_at = 0x98 + if wide { 0x70 } else { 0x60 };
+        put(&mut image, directories_at - 4, &16_u32.to_le_bytes());
+        let debug_dd_at = directories_at + 6 * 8;
         put(&mut image, debug_dd_at, &0x200_u32.to_le_bytes());
         put(&mut image, debug_dd_at + 4, &(2 * 28_u32).to_le_bytes());
         // Entry 0 is POGO data, entry 1 the CodeView record.
@@ -773,6 +804,63 @@ mod tests {
         put(&mut image, 0x300, b"NB10");
         with_process(&[(BASE, &image)], |process| {
             assert!(DebugId::read(process, BASE).is_none());
+        });
+    }
+
+    #[test]
+    fn answers_nothing_when_the_directories_end_before_debug() {
+        let mut image = image(true);
+        put(&mut image, 0x98 + 0x6C, &6_u32.to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            assert!(DebugId::read(process, BASE).is_none());
+        });
+    }
+
+    #[test]
+    fn reads_through_an_optional_header_that_ends_at_the_debug_slot() {
+        let mut image = image(true);
+        put(&mut image, 0x98 + 0x6C, &7_u32.to_le_bytes());
+        put(&mut image, 0x94, &(0x70 + 7 * 8_u16).to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            assert_eq!(DebugId::read(process, BASE).unwrap().guid, GUID);
+        });
+    }
+
+    #[test]
+    fn answers_nothing_for_a_codeview_entry_too_short_for_its_record() {
+        let mut image = image(true);
+        put(&mut image, 0x21C + 0x10, &0x10_u32.to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            assert!(DebugId::read(process, BASE).is_none());
+        });
+    }
+
+    #[test]
+    fn answers_nothing_for_a_debug_directory_outside_the_image() {
+        let mut image = image(true);
+        put(&mut image, 0x98 + 0x38, &0x200_u32.to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            assert!(DebugId::read(process, BASE).is_none());
+        });
+    }
+
+    #[test]
+    fn reads_a_codeview_entry_past_the_sixteenth() {
+        let mut image = image(true);
+        image.resize(0x800, 0);
+        put(&mut image, 0x98 + 0x38, &0x800_u32.to_le_bytes());
+        // Eighteen entries, the CodeView one last, its record moved clear of
+        // the table.
+        put(&mut image, 0x138 + 4, &(18 * 28_u32).to_le_bytes());
+        put(&mut image, 0x21C, &[0; 28]);
+        put(&mut image, 0x3DC + 0xC, &2_u32.to_le_bytes());
+        put(&mut image, 0x3DC + 0x10, &0x30_u32.to_le_bytes());
+        put(&mut image, 0x3DC + 0x14, &0x600_u32.to_le_bytes());
+        put(&mut image, 0x600, b"RSDS");
+        put(&mut image, 0x604, &GUID);
+        put(&mut image, 0x614, &1_u32.to_le_bytes());
+        with_process(&[(BASE, &image)], |process| {
+            assert_eq!(DebugId::read(process, BASE).unwrap().guid, GUID);
         });
     }
 }
