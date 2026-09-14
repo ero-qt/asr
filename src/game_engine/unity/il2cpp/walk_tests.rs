@@ -1,6 +1,6 @@
 //! Tests over a hand-laid image of IL2CPP's structures.
 
-use super::{IL2CPPOffsets, Module, Version};
+use super::{IL2CPPOffsets, Module};
 use crate::runtime::mock::with_process;
 use crate::{Address, PointerSize};
 
@@ -109,6 +109,14 @@ impl Player {
 
 const MEASURED_6000_5: (u16, u16, u16, u16) = (6000, 5, 10, 54518);
 
+// The offsets of the 6000.5 player at a width, for tests that lay structures by
+// hand.
+fn measured(pointer_size: PointerSize) -> &'static IL2CPPOffsets {
+    &super::builds::nearest(MEASURED_6000_5, pointer_size)
+        .unwrap()
+        .offsets
+}
+
 // A game on a measured player attaches with the offsets measured on that
 // player.
 #[test]
@@ -190,15 +198,14 @@ fn x86_image(store: &'static [u8], operand_at: u64) -> vec::Vec<u8> {
 }
 
 // The scan reads no offsets, and the version tables carry no 32 bit arm, so
-// the x64 offsets stand in. The module is the first 0x1000 bytes of the
+// the 6000.5 x86 offsets stand in. The module is the first 0x1000 bytes of the
 // image, so the image can hold bytes past the module's end.
 fn attach_x86(process: &crate::Process) -> Option<Module> {
     Module::attach_with(
         process,
         (Address::new(BASE), 0x1000),
         PointerSize::Bit32,
-        Version::V2022,
-        IL2CPPOffsets::new(Version::V2022, PointerSize::Bit64).unwrap(),
+        measured(PointerSize::Bit32),
     )
 }
 
@@ -336,8 +343,7 @@ fn x64_globals_resolve_from_a_mapped_image() {
             process,
             (Address::new(BASE), 0x1000),
             PointerSize::Bit64,
-            Version::V2022,
-            IL2CPPOffsets::new(Version::V2022, PointerSize::Bit64).unwrap(),
+            measured(PointerSize::Bit64),
         )
         .unwrap();
         assert_eq!(module.assemblies, Address::new(BASE + 0x900));
@@ -357,8 +363,7 @@ fn x64_scanner_refuses_an_x86_image() {
             process,
             (Address::new(BASE), 0x1000),
             PointerSize::Bit64,
-            Version::V2022,
-            IL2CPPOffsets::new(Version::V2022, PointerSize::Bit64).unwrap(),
+            measured(PointerSize::Bit64),
         )
         .is_none());
     });
@@ -388,7 +393,6 @@ fn assembly_names_resolve_through_the_image() {
         let module = Module {
             assemblies: Address::new(BASE),
             type_info_definition_table: Address::new(BASE + 0x10),
-            version: Version::V2022,
             offsets,
             pointer_size: PointerSize::Bit64,
         };
@@ -400,6 +404,8 @@ fn assembly_names_resolve_through_the_image() {
 // A 32 bit target lays the assemblies vector and its pointers at four bytes.
 #[test]
 fn images_resolve_on_32_bit_targets() {
+    let offsets = measured(PointerSize::Bit32);
+    let name_at = offsets.image.assembly_name.unwrap() as u64;
     let mut i = vec![0; 0x1000];
     let ptr = |i: &mut [u8], at: u64, target: u64| {
         put(i, at, &(target as u32).to_le_bytes());
@@ -410,16 +416,76 @@ fn images_resolve_on_32_bit_targets() {
     ptr(&mut i, 0x4, BASE + 0x44); // and end, one assembly along
     ptr(&mut i, 0x40, BASE + 0x80);
     ptr(&mut i, 0x80, BASE + 0x100); // Il2CppAssembly.image
-    ptr(&mut i, 0x80 + 0x18, BASE + 0x800); // Il2CppAssembly.aname
+    ptr(&mut i, 0x100 + name_at, BASE + 0x800); // Il2CppImage.nameNoExt
 
     with_process(&[(BASE, &i)], |process| {
         let module = Module {
             assemblies: Address::new(BASE),
             type_info_definition_table: Address::new(BASE + 0x10),
-            version: Version::V2022,
-            offsets: IL2CPPOffsets::new(Version::V2022, PointerSize::Bit64).unwrap(),
+            offsets,
             pointer_size: PointerSize::Bit32,
         };
         assert!(module.get_default_image(process).is_some());
     });
+}
+
+// An image says where its first type sits in the type table. Players up to
+// 2020.1 keep that index in the image. Later players keep a handle there,
+// and the index sits behind it.
+#[test]
+fn class_walk_reads_the_type_start_where_the_build_keeps_it() {
+    use super::offsets::TypeStart;
+
+    let walk = |build: &'static super::builds::Build| {
+        let offsets = &build.offsets;
+        let mut i = vec![0; 0x1000];
+        let ptr = |i: &mut [u8], at: u64, target: u64| {
+            put(i, at, &target.to_le_bytes());
+        };
+        put(&mut i, 0x800, b"Timer");
+        ptr(&mut i, 0x10, BASE + 0x200); // the type table
+        ptr(&mut i, 0x210, BASE + 0x300); // its entry 2
+        ptr(&mut i, 0x300 + offsets.class.name as u64, BASE + 0x800);
+        put(
+            &mut i,
+            0x100 + offsets.image.type_count as u64,
+            &1_u32.to_le_bytes(),
+        );
+        match offsets.image.type_start {
+            TypeStart::Inline(at) => put(&mut i, 0x100 + at as u64, &2_u32.to_le_bytes()),
+            TypeStart::Handle(at) => {
+                ptr(&mut i, 0x100 + at as u64, BASE + 0x180);
+                put(&mut i, 0x180, &2_u32.to_le_bytes());
+            }
+        }
+
+        with_process(&[(BASE, &i)], |process| {
+            let module = Module {
+                assemblies: Address::new(BASE),
+                type_info_definition_table: Address::new(BASE + 0x10),
+                offsets,
+                pointer_size: PointerSize::Bit64,
+            };
+            let image = super::Image {
+                image: Address::new(BASE + 0x100),
+            };
+            image
+                .get_class(process, &module, "Timer")
+                .map(|class| class.class)
+        })
+    };
+
+    let inline = super::builds::nearest((2018, 4, 36, 54151), PointerSize::Bit64).unwrap();
+    assert!(matches!(
+        inline.offsets.image.type_start,
+        TypeStart::Inline(0x18)
+    ));
+    assert_eq!(walk(inline), Some(Address::new(BASE + 0x300)));
+
+    let handle = super::builds::nearest(MEASURED_6000_5, PointerSize::Bit64).unwrap();
+    assert!(matches!(
+        handle.offsets.image.type_start,
+        TypeStart::Handle(0x28)
+    ));
+    assert_eq!(walk(handle), Some(Address::new(BASE + 0x300)));
 }

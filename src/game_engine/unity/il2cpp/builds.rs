@@ -3,16 +3,14 @@
 //! `GameAssembly.pdb`.
 
 use super::offsets::{
-    AssemblyOffsets, ClassOffsets, FieldInfoOffsets, IL2CPPOffsets, ImageOffsets,
+    AssemblyOffsets, ClassOffsets, FieldInfoOffsets, IL2CPPOffsets, ImageOffsets, TypeStart,
 };
-use super::Version;
 use crate::PointerSize;
 
 /// One measured IL2CPP player and the offsets from its PDB.
 pub(super) struct Build {
     pub(super) unity: (u16, u16, u16, u16),
     pub(super) pointer_size: PointerSize,
-    pub(super) version: Version,
     pub(super) offsets: IL2CPPOffsets,
 }
 
@@ -46,7 +44,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2018, 4, 36, 54151),
         pointer_size: PointerSize::Bit64,
-        version: Version::Base,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -55,7 +52,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x1c,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Inline(0x18),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -77,7 +74,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2018, 4, 36, 54151),
         pointer_size: PointerSize::Bit32,
-        version: Version::Base,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -86,7 +82,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0x10,
-                metadata_handle: 0xc,
+                type_start: TypeStart::Inline(0xc),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -108,7 +104,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2019, 4, 41, 9172),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2019,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -117,7 +112,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x1c,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Inline(0x18),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -139,7 +134,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2019, 4, 41, 9172),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2019,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -148,7 +142,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0x10,
-                metadata_handle: 0xc,
+                type_start: TypeStart::Inline(0xc),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -170,7 +164,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2020, 1, 18, 38512),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2019,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -179,7 +172,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x1c,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Inline(0x18),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -201,7 +194,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2020, 1, 18, 38512),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2019,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -210,7 +202,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0x10,
-                metadata_handle: 0xc,
+                type_start: TypeStart::Inline(0xc),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -232,7 +224,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2021, 3, 11, 23713),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2020,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -241,7 +232,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -263,7 +254,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2021, 3, 11, 23713),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2020,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -272,7 +262,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -294,7 +284,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2022, 3, 0, 4507),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -303,7 +292,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -325,7 +314,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2022, 3, 0, 4507),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -334,7 +322,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -356,7 +344,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2023, 1, 0, 2298),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -365,7 +352,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -387,7 +374,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2023, 1, 0, 2298),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -396,7 +382,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -418,7 +404,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2023, 1, 22, 16744),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -427,7 +412,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -449,7 +434,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (2023, 1, 22, 16744),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -458,7 +442,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -480,7 +464,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 2, 12, 40285),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -489,7 +472,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -511,7 +494,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 2, 12, 40285),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -520,7 +502,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -542,7 +524,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 3, 21, 9777),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -551,7 +532,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -573,7 +554,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 3, 21, 9777),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -582,7 +562,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -604,7 +584,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 5, 10, 54518),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -613,7 +592,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -635,7 +614,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 5, 10, 54518),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -644,7 +622,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -666,7 +644,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 7, 0, 5476),
         pointer_size: PointerSize::Bit64,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -675,7 +652,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x8),
                 type_count: 0x18,
-                metadata_handle: 0x28,
+                type_start: TypeStart::Handle(0x28),
             },
             class: ClassOffsets {
                 name: 0x10,
@@ -697,7 +674,6 @@ static BUILDS: &[Build] = &[
     Build {
         unity: (6000, 7, 0, 5476),
         pointer_size: PointerSize::Bit32,
-        version: Version::V2022,
         offsets: IL2CPPOffsets {
             assembly: AssemblyOffsets {
                 image: 0x0,
@@ -706,7 +682,7 @@ static BUILDS: &[Build] = &[
             image: ImageOffsets {
                 assembly_name: Some(0x4),
                 type_count: 0xc,
-                metadata_handle: 0x18,
+                type_start: TypeStart::Handle(0x18),
             },
             class: ClassOffsets {
                 name: 0x8,
@@ -727,7 +703,7 @@ static BUILDS: &[Build] = &[
 
 #[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
-    use super::{nearest, IL2CPPOffsets, BUILDS};
+    use super::{nearest, BUILDS};
     use crate::PointerSize;
 
     #[test]
@@ -784,22 +760,5 @@ mod tests {
         assert_eq!(build.unity, (2021, 3, 11, 23713));
         assert_eq!(build.pointer_size, PointerSize::Bit32);
         assert!(nearest((2021, 3, 5, 1), PointerSize::Bit16).is_none());
-    }
-
-    // The version table for 6000.5 and 6000.7 puts static_fields where 2022.3
-    // had it. Both measured players put it lower, and 6000.7 moves field_count
-    // too.
-    #[test]
-    fn unity_6000_5_builds_diverge_from_their_version_table_on_statics() {
-        for (unity, static_fields) in [((6000, 5, 10, 54518), 0xA0), ((6000, 7, 0, 5476), 0x98)] {
-            let build = nearest(unity, PointerSize::Bit64).unwrap();
-            let table = IL2CPPOffsets::new(build.version, build.pointer_size).unwrap();
-            assert_eq!(build.offsets.class.static_fields, static_fields);
-            assert_ne!(build.offsets.class.static_fields, table.class.static_fields);
-        }
-
-        let build = nearest((6000, 7, 0, 5476), PointerSize::Bit64).unwrap();
-        let table = IL2CPPOffsets::new(build.version, build.pointer_size).unwrap();
-        assert_ne!(build.offsets.class.field_count, table.class.field_count);
     }
 }

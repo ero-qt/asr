@@ -1,5 +1,6 @@
+use super::offsets::TypeStart;
 use super::CSTR;
-use super::{Class, Module, Version};
+use super::{Class, Module};
 use crate::{future::retry, Address, Process};
 
 /// An image is a .NET DLL that is loaded by the game. The `Assembly-CSharp`
@@ -20,16 +21,11 @@ impl Image {
             .read::<u32>(self.image + module.offsets.image.type_count)
             .unwrap_or_default() as u64;
 
-        let metadata_ptr = match (type_count, module.version) {
+        let metadata_ptr = match (type_count, module.offsets.image.type_start) {
             (0, _) => Address::NULL,
-            (_, Version::Base | Version::V2019) => {
-                self.image + module.offsets.image.metadata_handle
-            }
-            (_, _) => process
-                .read_pointer(
-                    self.image + module.offsets.image.metadata_handle,
-                    module.pointer_size,
-                )
+            (_, TypeStart::Inline(at)) => self.image + at,
+            (_, TypeStart::Handle(at)) => process
+                .read_pointer(self.image + at, module.pointer_size)
                 .unwrap_or_default(),
         };
 
