@@ -1,6 +1,6 @@
 //! Tests pinning how the scene manager is found through a measured build:
 //! the anchor of the build is scanned in the engine module, every match
-//! must name one global, and the global holds the manager.
+//! must point at the same global, and the global holds the manager.
 
 use super::{builds, Scene, SceneManager};
 use crate::{runtime::mock::with_modules, Address, PointerSize, Process};
@@ -196,33 +196,31 @@ fn scenes_come_from_the_loaded_scene_array() {
     );
 }
 
-// Unity 5.6 links the engine into the game's own executable. Its x86 anchor
-// is the head of the function that tears the manager down: the load of the
-// global, a null check, a virtual call, and the 0x58 bytes it frees, which
-// tell it apart from the other teardowns sharing the same head.
-fn anchor_5_6_x86(image: &mut [u8], at: u64, global: u64, freed: u8) {
-    put(image, at, &[0x8B, 0x0D]);
-    put(image, at + 2, &(global as u32).to_le_bytes());
+// The x86 anchor of Unity 5.6 through 2017.2 is the head of a function that
+// loads the global into ecx, pushes ebx, takes the address of the scene list
+// and clears ebx. The scene list moves between 5.6 and 2017.1, so the byte
+// holding its offset is open.
+fn anchor_old_x86(image: &mut [u8], at: u64, global: u64, scenes: u8) {
+    put(image, at, &[0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x8B, 0x0D]);
+    put(image, at + 8, &(global as u32).to_le_bytes());
     put(
         image,
-        at + 6,
+        at + 12,
         &[
-            0x56, 0x8B, 0xF1, 0x85, 0xC9, 0x74, 0x08, 0x8B, 0x01, 0x8B, 0x10, 0x6A, 0x00, 0xFF,
-            0xD2, 0x6A, freed, 0x56,
+            0x53, 0x8D, 0x41, scenes, 0x33, 0xDB, 0x89, 0x45, 0xF8, 0x39, 0x18, 0x74,
         ],
     );
 }
 
 #[test]
-fn the_5_6_x86_anchor_needs_the_whole_teardown_head() {
+fn the_old_x86_anchor_leaves_the_scene_list_offset_open() {
     let profile = &builds::nearest((5, 6, 7, 3267), PointerSize::Bit32)
         .unwrap()
         .profile;
     let mut image = vec![0; 0x2000];
-    anchor_5_6_x86(&mut image, 0x100, BASE32 + 0x800, 0x58);
-    anchor_5_6_x86(&mut image, 0x200, BASE32 + 0x808, 0x40);
+    anchor_old_x86(&mut image, 0x100, BASE32 + 0x800, 0x0C);
+    anchor_old_x86(&mut image, 0x200, BASE32 + 0x800, 0x10);
     put(&mut image, 0x800, &((BASE32 + 0x900) as u32).to_le_bytes());
-    put(&mut image, 0x808, &((BASE32 + 0xA00) as u32).to_le_bytes());
 
     let manager = with_modules(
         &[(BASE32, &image)],

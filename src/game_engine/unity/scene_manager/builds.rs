@@ -1,7 +1,7 @@
 //! Known Unity players and the layout of their scene manager, scenes,
 //! transforms and game objects. Each entry is one measured player. The full
 //! Unity version says which player. The offsets were read off the player's
-//! code through the functions its PDB names, and the offsets and the shapes
+//! code through the functions listed in its PDB, and the offsets and shapes
 //! were checked against a running player with a known scene.
 
 use super::offsets::{
@@ -56,20 +56,20 @@ const SCENE_COUNT_GETTER_X64: Anchor = Anchor {
     displacement: 3,
 };
 
-// The head of the function that tears the scene manager down on Unity 5.6:
-// it loads the global into ecx, checks it, calls its destructor, and frees
-// 0x58 bytes. The 0x58 tells it apart from the other teardowns that share
-// the head.
-const TEARDOWN_X86: Anchor = Anchor {
+// A function that loads the global into ecx, pushes ebx, takes the address
+// of the scene list and clears ebx. The offset of the scene list is the one
+// byte that changes between Unity 5.6 and 2017.1, so it is left open. It
+// hits once on every player from Unity 5.6 through 2017.2.
+const LOAD_AND_CLEAR_ECX_X86: Anchor = Anchor {
     signature: Signature::new(
-        "8B 0D ?? ?? ?? ?? 56 8B F1 85 C9 74 08 8B 01 8B 10 6A 00 FF D2 6A 58 56",
+        "55 8B EC 83 EC 08 8B 0D ?? ?? ?? ?? 53 8D 41 ?? 33 DB 89 45 F8 39 18 74",
     ),
-    displacement: 2,
+    displacement: 8,
 };
 
-// A function that loads the global into eax, then pushes ebx, clears it and
-// stores eax in a local. It hits once on every player from Unity 2017.4
-// through 2021.3.
+// The same function once the global lands in eax and is stored in a local
+// before the clear. It hits once on every player from Unity 2017.3 through
+// 2021.3.
 const LOAD_AND_CLEAR_X86: Anchor = Anchor {
     signature: Signature::new(
         "A1 ?? ?? ?? ?? 53 33 DB 89 45 FC ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??",
@@ -133,7 +133,7 @@ pub(super) const BUILDS: &[Build] = &[
         unity: (5, 6, 7, 3267),
         profile: Profile {
             pointer_size: PointerSize::Bit32,
-            anchor: TEARDOWN_X86,
+            anchor: LOAD_AND_CLEAR_ECX_X86,
             path: PathShape::Pointer,
             reference: ReferenceShape::CachedObject,
             manager: ManagerOffsets {
