@@ -7,7 +7,7 @@ use super::offsets::{
     AssemblyOffsets, ClassOffsets, FieldInfoOffsets, GenericOffsets, HashTableOffsets,
     ImageOffsets, MonoVTableOffsets, TypeOffsets,
 };
-use super::{builds, BinaryFormat, Module, MonoOffsets, UnityPointer, Version};
+use super::{builds, Library, Module, Profile, UnityPointer};
 use crate::file_format::pe::DebugId;
 use crate::runtime::mock::{poll_once, with_process};
 use crate::{Address, PointerSize, Process};
@@ -287,53 +287,46 @@ fn image() -> Vec<u8> {
     i
 }
 
-fn module(offsets: &'static MonoOffsets) -> Module {
+fn module(profile: Profile) -> Module {
     Module {
         assemblies: Address::new(BASE),
-        version: Version::V2,
-        offsets,
+        profile,
         pointer_size: PointerSize::Bit64,
     }
 }
 
-fn era() -> &'static MonoOffsets {
-    MonoOffsets::new(Version::V2, PointerSize::Bit64, BinaryFormat::PE).unwrap()
-}
-
-fn measured() -> &'static MonoOffsets {
+fn measured() -> Profile {
     // The 2019.4 x64 build the fixture is laid at.
     let stored = [
         0xC7, 0xAA, 0x10, 0x77, 0x5A, 0x31, 0x30, 0x4D, 0xA7, 0x7A, 0x08, 0x07, 0x29, 0x69, 0x66,
         0xF6,
     ];
-    &builds::find(&DebugId {
+    builds::find(&DebugId {
         guid: stored,
         age: 1,
     })
     .unwrap()
-    .offsets
+    .profile
 }
 
-fn on_fixture(offsets: &'static MonoOffsets, test: impl FnOnce(&Process, &Module)) {
+fn on_fixture(profile: Profile, test: impl FnOnce(&Process, &Module)) {
     with_process(&[(BASE, &image())], |process| {
-        test(process, &module(offsets));
+        test(process, &module(profile));
     });
 }
 
 #[test]
 fn images_resolve_by_name_through_both_routes() {
-    for offsets in [era(), measured()] {
-        on_fixture(offsets, |process, module| {
-            assert!(module.get_default_image(process).is_some());
-            assert!(module.get_image(process, "mscorlib").is_some());
-            assert!(module.get_image(process, "Assembly-DoesNotExist").is_none());
-        });
-    }
+    on_fixture(measured(), |process, module| {
+        assert!(module.get_default_image(process).is_some());
+        assert!(module.get_image(process, "mscorlib").is_some());
+        assert!(module.get_image(process, "Assembly-DoesNotExist").is_none());
+    });
 }
 
 #[test]
 fn classes_resolve_by_name_and_namespace() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         assert!(image.get_class(process, module, "GameManager").is_some());
         assert!(image.get_class(process, module, "Game.Boss").is_some());
@@ -345,7 +338,7 @@ fn classes_resolve_by_name_and_namespace() {
 
 #[test]
 fn field_offsets_resolve_declared_inherited_and_backing() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         let game_manager = image.get_class(process, module, "GameManager").unwrap();
         assert_eq!(
@@ -365,7 +358,7 @@ fn field_offsets_resolve_declared_inherited_and_backing() {
 
 #[test]
 fn nested_classes_resolve_by_their_written_name() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         assert!(image
             .get_class(process, module, "Game.Outer+Inner")
@@ -386,7 +379,9 @@ fn nested_classes_resolve_by_their_written_name() {
 // miss cleanly rather than answer with whichever class carries the leaf name.
 #[test]
 fn nested_lookups_without_a_measured_offset_answer_nothing() {
-    static UNMEASURED: MonoOffsets = MonoOffsets {
+    const UNMEASURED: Profile = Profile {
+        pointer_size: PointerSize::Bit64,
+        library: Library::MonoBdwgc,
         assembly: AssemblyOffsets {
             aname: Some(0x10),
             image: 0x60,
@@ -429,7 +424,7 @@ fn nested_lookups_without_a_measured_offset_answer_nothing() {
         v_table: MonoVTableOffsets { vtable: 0x40 },
     };
 
-    on_fixture(&UNMEASURED, |process, module| {
+    on_fixture(UNMEASURED, |process, module| {
         let image = module.get_default_image(process).unwrap();
         assert!(image
             .get_class(process, module, "Game.Outer+Inner")
@@ -447,7 +442,7 @@ fn nested_lookups_without_a_measured_offset_answer_nothing() {
 // from holds it, and the inflated fields are the instance's.
 #[test]
 fn generic_field_counts_resolve_through_the_definition() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         let inventory = image.get_class(process, module, "Inventory").unwrap();
         assert_eq!(
@@ -461,7 +456,7 @@ fn generic_field_counts_resolve_through_the_definition() {
 // resolves.
 #[test]
 fn field_climbs_stop_at_the_engine() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         let game_manager = image.get_class(process, module, "GameManager").unwrap();
         assert!(game_manager
@@ -472,7 +467,7 @@ fn field_climbs_stop_at_the_engine() {
 
 #[test]
 fn statics_resolve_through_the_vtable() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         let game_manager = image.get_class(process, module, "GameManager").unwrap();
         assert_eq!(
@@ -489,7 +484,7 @@ fn statics_resolve_through_the_vtable() {
 // table, not the table of the class the lookup started at.
 #[test]
 fn static_instances_resolve_through_the_declaring_class() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         let boss = image.get_class(process, module, "Boss").unwrap();
         assert_eq!(
@@ -510,7 +505,7 @@ fn static_instances_resolve_through_the_declaring_class() {
 // which the buffer size does not judge.
 #[test]
 fn lists_resolve_through_their_own_class() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let at = Address::new(BASE + 0x3F00);
         let offsets = module.get_list_offsets(process, at).unwrap();
         let read = module.read_list::<i32, 4>(process, offsets, at).unwrap();
@@ -520,7 +515,7 @@ fn lists_resolve_through_their_own_class() {
 
 #[test]
 fn lists_derived_from_corlibs_list_resolve() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let at = Address::new(BASE + 0x4F00);
         let offsets = module.get_list_offsets(process, at).unwrap();
         let read = module.read_list::<i32, 4>(process, offsets, at).unwrap();
@@ -532,7 +527,7 @@ fn lists_derived_from_corlibs_list_resolve() {
 // list.
 #[test]
 fn list_counts_past_their_backing_refuse() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let at = Address::new(BASE + 0x3F08);
         let offsets = module.get_list_offsets(process, at).unwrap();
         assert!(module.read_list::<i32, 128>(process, offsets, at).is_err());
@@ -544,7 +539,7 @@ fn list_counts_past_their_backing_refuse() {
 // torn-resize refusal guards the count.
 #[test]
 fn reference_lists_resolve_their_element_addresses() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let at = Address::new(BASE + 0x3F18);
         let offsets = module.get_list_offsets(process, at).unwrap();
         let read = module
@@ -567,7 +562,7 @@ fn reference_lists_resolve_their_element_addresses() {
 // misses cleanly rather than answering with whatever offsets exist.
 #[test]
 fn objects_that_are_not_lists_answer_nothing() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         assert!(module
             .get_list_offsets(process, Address::new(BASE + 0x3F10))
             .is_none());
@@ -581,7 +576,7 @@ fn objects_that_are_not_lists_answer_nothing() {
 // resolved against the object's own class read through its vtable.
 #[test]
 fn pointers_dereference_through_a_static_root() {
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         let pointer = UnityPointer::<2>::new("GameManager", 0, &["instance", "points"]);
         assert_eq!(pointer.deref::<u32>(process, module, &image).unwrap(), 777,);
@@ -601,7 +596,7 @@ fn public_types_keep_their_properties() {
     is_copy::<super::Image>();
     is_copy::<super::Class>();
 
-    on_fixture(era(), |process, module| {
+    on_fixture(measured(), |process, module| {
         let image = module.get_default_image(process).unwrap();
         let _ = fused(image.classes(process, module));
     });
