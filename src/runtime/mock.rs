@@ -28,6 +28,7 @@ pub fn with_process<R>(regions: &[(u64, &[u8])], test: impl FnOnce(&Process) -> 
 
 /// Runs a test against a process whose memory holds the given regions and
 /// whose loaded modules are the given names, each with an address and a size.
+/// The first module is the executable of the process.
 pub fn with_modules<R>(
     regions: &[(u64, &[u8])],
     modules: &[(&str, u64, u64)],
@@ -47,6 +48,47 @@ pub fn with_modules<R>(
     });
     let process = Process::attach("mock").expect("the mock always attaches");
     test(&process)
+}
+
+/// A `UnityPlayer.dll` image of 0x1000 bytes: a PE32+ header for x64 whose
+/// resource directory holds one version resource carrying the given file
+/// version as its four parts.
+pub fn unity_player_image(unity: (u16, u16, u16, u16)) -> Vec<u8> {
+    fn put(image: &mut [u8], at: usize, bytes: &[u8]) {
+        image[at..at + bytes.len()].copy_from_slice(bytes);
+    }
+    let mut i = std::vec![0; 0x1000];
+    put(&mut i, 0x00, b"MZ");
+    put(&mut i, 0x3C, &0x80_u32.to_le_bytes());
+    put(&mut i, 0x80, b"PE\0\0");
+    put(&mut i, 0x84, &0x8664_u16.to_le_bytes()); // machine: x64
+    put(&mut i, 0x94, &0xF0_u16.to_le_bytes()); // size of optional header
+    put(&mut i, 0x98, &0x20B_u16.to_le_bytes()); // PE32+
+    put(&mut i, 0x98 + 0x38, &0x1000_u32.to_le_bytes()); // size of image
+    put(&mut i, 0x98 + 0x80, &0x400_u32.to_le_bytes()); // resource directory
+    put(&mut i, 0x98 + 0x84, &0x100_u32.to_le_bytes());
+    let entry = |i: &mut [u8], at: usize, id: u32, offset: u32| {
+        put(i, at, &id.to_le_bytes());
+        put(i, at + 4, &offset.to_le_bytes());
+    };
+    // root: one id entry, RT_VERSION (0x10), a directory at +0x20
+    put(&mut i, 0x400 + 0xE, &1_u16.to_le_bytes());
+    entry(&mut i, 0x410, 0x10, 0x8000_0020);
+    // type directory: one directory entry at +0x40
+    put(&mut i, 0x420 + 0xE, &1_u16.to_le_bytes());
+    entry(&mut i, 0x430, 1, 0x8000_0040);
+    // language directory: one data entry at +0x60
+    put(&mut i, 0x440 + 0xE, &1_u16.to_le_bytes());
+    entry(&mut i, 0x450, 0x409, 0x60);
+    // the data entry names VS_VERSIONINFO at 0x600
+    put(&mut i, 0x460, &0x600_u32.to_le_bytes());
+    // VS_FIXEDFILEINFO sits 0x28 in
+    put(&mut i, 0x628, &0xFEEF_04BD_u32.to_le_bytes());
+    put(&mut i, 0x630, &unity.1.to_le_bytes());
+    put(&mut i, 0x632, &unity.0.to_le_bytes());
+    put(&mut i, 0x634, &unity.3.to_le_bytes());
+    put(&mut i, 0x636, &unity.2.to_le_bytes());
+    i
 }
 
 fn module(name_ptr: *const u8, name_len: usize) -> Option<(u64, u64)> {
@@ -88,6 +130,33 @@ extern "C" fn process_get_module_size(
 /// condition the fixture never satisfies.
 pub fn poll_once<F: Future>(future: F) -> Poll<F::Output> {
     core::pin::pin!(future).poll(&mut Context::from_waker(Waker::noop()))
+}
+
+/// The path of the executable, which is the first module. A null buffer
+/// asks for the length.
+#[no_mangle]
+extern "C" fn process_get_path(_process: u64, buf_ptr: *mut u8, buf_len_ptr: *mut usize) -> bool {
+    MODULES.with(|held| {
+        let held = held.borrow();
+        let Some((name, _, _)) = held.first() else {
+            return false;
+        };
+        let path = std::format!("/mnt/c/game/{name}");
+        // SAFETY: The runtime layer passes a valid pointer to the length, and
+        // either a null buffer or a buffer of that length.
+        unsafe {
+            let len = *buf_len_ptr;
+            *buf_len_ptr = path.len();
+            if buf_ptr.is_null() {
+                return true;
+            }
+            if len < path.len() {
+                return false;
+            }
+            core::ptr::copy_nonoverlapping(path.as_ptr(), buf_ptr, path.len());
+        }
+        true
+    })
 }
 
 #[no_mangle]
