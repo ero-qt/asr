@@ -94,6 +94,35 @@ fn x86_entries_follow_the_root_list_move_of_6000_1() {
     assert_eq!(roots((6000, 3, 21, 9777)), ((6000, 3, 21, 9777), 0x98));
 }
 
+// The layout of Unity 2017 starts at 2017.1.0: the scene path moves from
+// 0x18 to 0x10 and the root list from 0xB8 to 0xB0 on x64, and a 2017.4
+// player reads the same. On x86 the offsets hold from 2017.1.0 as well, but
+// the anchor of 5.6 through 2017.2 stops hitting at 2017.3.0, so x86 has
+// entries at both.
+#[test]
+fn the_2017_layout_starts_at_2017_1() {
+    let x64 = |player| builds::nearest(player, PointerSize::Bit64).unwrap();
+    assert_eq!(x64((2017, 1, 5, 22691)).unity, (2017, 1, 0, 9747));
+    assert_eq!(x64((2017, 1, 5, 22691)).profile.scene.path, 0x10);
+    assert_eq!(x64((2017, 1, 5, 22691)).profile.scene.roots, 0xB0);
+    assert_eq!(x64((2017, 4, 40, 5126)).unity, (2017, 1, 0, 9747));
+    assert_eq!(x64((5, 6, 7, 3267)).profile.scene.path, 0x18);
+
+    let x86 = |player| builds::nearest(player, PointerSize::Bit32).unwrap();
+    assert_eq!(x86((2017, 2, 5, 36295)).unity, (2017, 1, 0, 9747));
+    assert_eq!(x86((2017, 3, 1, 7475)).unity, (2017, 3, 0, 63597));
+    assert_eq!(x86((2017, 4, 40, 5126)).unity, (2017, 3, 0, 63597));
+    let (early, late) = (x86((2017, 1, 0, 9747)), x86((2017, 3, 0, 63597)));
+    assert_eq!(early.profile.anchor.displacement, 8);
+    assert_eq!(late.profile.anchor.displacement, 1);
+    assert_eq!(early.profile.scene.roots, late.profile.scene.roots);
+    assert_eq!(
+        early.profile.game_object.name,
+        late.profile.game_object.name
+    );
+    assert_eq!(x86((5, 6, 7, 3267)).profile.anchor.displacement, 8);
+}
+
 #[test]
 fn table_reads_oldest_to_newest() {
     for pointer_size in [PointerSize::Bit64, PointerSize::Bit32] {

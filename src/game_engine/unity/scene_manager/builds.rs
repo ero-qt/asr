@@ -159,9 +159,9 @@ pub(super) const BUILDS: &[Build] = &[
             },
         },
     },
-    // Unity 2017.4.40f1, x64.
+    // Unity 2017.1.0f3, x64.
     Build {
-        unity: (2017, 4, 40, 5126),
+        unity: (2017, 1, 0, 9747),
         profile: Profile {
             pointer_size: PointerSize::Bit64,
             anchor: PROLOGUE_LOAD_X64,
@@ -190,9 +190,40 @@ pub(super) const BUILDS: &[Build] = &[
             },
         },
     },
-    // Unity 2017.4.40f1, x86.
+    // Unity 2017.1.0f3, x86.
     Build {
-        unity: (2017, 4, 40, 5126),
+        unity: (2017, 1, 0, 9747),
+        profile: Profile {
+            pointer_size: PointerSize::Bit32,
+            anchor: LOAD_AND_CLEAR_ECX_X86,
+            path: PathShape::Pointer,
+            reference: ReferenceShape::CachedObject,
+            manager: ManagerOffsets {
+                scenes: 0x8,
+                active_scene: 0x28,
+                dont_destroy_on_load_scene: 0x40,
+            },
+            scene: SceneOffsets {
+                path: 0xc,
+                build_index: 0x70,
+                roots: 0x88,
+            },
+            transform: TransformOffsets {
+                game_object: 0x1c,
+                children: 0x50,
+            },
+            game_object: GameObjectOffsets {
+                components: 0x1c,
+                name: 0x48,
+            },
+            object: ObjectOffsets {
+                managed_reference: 0x18,
+            },
+        },
+    },
+    // Unity 2017.3.0f3, x86.
+    Build {
+        unity: (2017, 3, 0, 63597),
         profile: Profile {
             pointer_size: PointerSize::Bit32,
             anchor: LOAD_AND_CLEAR_X86,
