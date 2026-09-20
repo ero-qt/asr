@@ -85,8 +85,8 @@ fn the_first_inline_path_build_is_2021_1() {
         let build = builds::nearest(player, PointerSize::Bit64).unwrap();
         (build.unity, build.profile.path)
     };
-    let first = (2021, 1, 29, 10531);
-    assert_eq!(shape((2021, 1, 0, 1)), (first, PathShape::InlineNul));
+    let first = (2021, 1, 0, 42313);
+    assert_eq!(shape((2021, 1, 29, 10531)), (first, PathShape::InlineNul));
     assert_eq!(shape((2021, 2, 20, 62729)), (first, PathShape::InlineNul));
     assert_eq!(shape((2021, 3, 0, 44232)), (first, PathShape::InlineNul));
     assert_eq!(
@@ -159,7 +159,7 @@ fn a_long_path_reads_through_the_pointer_beside_the_spare_byte() {
 // are whatever was there before.
 #[test]
 fn a_short_path_reads_inline_up_to_the_nul() {
-    let manager = manager((2021, 1, 29, 10531), PointerSize::Bit64);
+    let manager = manager((2021, 1, 0, 42313), PointerSize::Bit64);
     let mut image = vec![0; 0x1000];
     let at = field(&manager);
     put(&mut image, at, b"Assets/Scenes/Boot.unity\0");
@@ -171,7 +171,7 @@ fn a_short_path_reads_inline_up_to_the_nul() {
 
 #[test]
 fn a_long_path_reads_through_the_pointer_before_the_spare_byte_existed() {
-    let manager = manager((2021, 1, 29, 10531), PointerSize::Bit64);
+    let manager = manager((2021, 1, 0, 42313), PointerSize::Bit64);
     let mut image = vec![0; 0x1000];
     spilled(
         &mut image,

@@ -314,9 +314,9 @@ pub(super) const BUILDS: &[Build] = &[
             },
         },
     },
-    // Unity 2021.1.29f1, x64.
+    // Unity 2021.1.0f1, x64.
     Build {
-        unity: (2021, 1, 29, 10531),
+        unity: (2021, 1, 0, 42313),
         profile: Profile {
             pointer_size: PointerSize::Bit64,
             anchor: PROLOGUE_LOAD_X64,
