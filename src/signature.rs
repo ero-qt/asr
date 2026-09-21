@@ -254,6 +254,12 @@ impl<const N: usize> Signature<N> {
             _buffer: [u8; MEM_SIZE.saturating_sub(1)],
         }
 
+        // How many bytes from the pages we already read sit in front of the
+        // page we're about to read, at most `N - 1`. When a page fails to
+        // read, we drop them, because the bytes after that page aren't next
+        // to them in memory.
+        let mut carried = 0usize;
+        let mut last_len = 0usize;
         let mut last_page_success = false;
 
         // Although a bit slower, we need to ensure the compiler doesn't do unexpected optimizations
@@ -288,51 +294,44 @@ impl<const N: usize> Signature<N> {
             let end = ((addr.value() & !((4 << 10) - 1)) + (4 << 10)).min(overall_end);
             let len = end.saturating_sub(addr.value()) as usize;
 
-            // If we have read the previous memory page successfully, then we can copy the last
-            // elements to the start of the buffer.
+            // The page we just read sits at `N - 1`, with what we carried in
+            // front of it. We move the last `N - 1` bytes of all that to the
+            // front, so a match that runs across the page boundary is still
+            // in one piece. A short page may leave us fewer, and then we
+            // carry just those.
+            let head = N.saturating_sub(1);
             if last_page_success {
-                let (start, end) = buffer.split_at_mut(N.saturating_sub(1));
-                start.copy_from_slice(&end[len.saturating_sub(N).saturating_add(1)..]);
+                let have = carried + last_len;
+                let keep = have.min(head);
+                buffer.copy_within(head + last_len - keep..head + last_len, head - keep);
+                carried = keep;
+            } else {
+                carried = 0;
             }
 
             let current_page_success = process
-                .read_into_slice(addr, &mut buffer[N.saturating_sub(1)..][..len])
+                .read_into_slice(addr, &mut buffer[head..][..len])
                 .is_ok();
 
-            // We define the final slice on which to perform the memory scan into. If we failed to read the memory page,
-            // this returns an empty slice so the subsequent iterator will result into an empty iterator.
-            // If we managed to read the current memory page, instead, we check if we have successfully read the data
-            // from the previous memory page.
-            let scan_buf = unsafe {
-                if current_page_success {
-                    if last_page_success {
-                        slice::from_raw_parts(
-                            buffer.as_ptr(),
-                            len.saturating_add(N).saturating_sub(1),
-                        )
-                    } else {
-                        slice::from_raw_parts(buffer.as_ptr().byte_add(N).byte_sub(1), len)
-                    }
-                } else {
-                    &[]
-                }
+            // If we couldn't read the page, there's nothing to scan and
+            // nothing to carry over.
+            let scan_buf = if current_page_success {
+                &buffer[head - carried..head + len]
+            } else {
+                &[]
             };
 
             let cur_addr = addr;
-            let cur_suc = last_page_success;
+            let cur_carried = carried;
 
             addr = Address::new(end);
+            last_len = len;
             last_page_success = current_page_success;
 
-            Some(self.scan_internal(&scan_buf).map(move |pos| {
-                let mut address = cur_addr.add(pos as u64);
-
-                if cur_suc {
-                    address = address.add_signed(-(N.saturating_sub(1) as i64))
-                }
-
-                address
-            }))
+            Some(
+                self.scan_internal(scan_buf)
+                    .map(move |pos| cur_addr.add(pos as u64).add_signed(-(cur_carried as i64))),
+            )
         })
         .flatten()
     }
@@ -631,4 +630,68 @@ fn find_byte_swar(haystack: &[u8], needle: u8, mut start: usize) -> Option<usize
     }
 
     None
+}
+
+#[cfg(all(test, not(target_family = "wasm")))]
+mod tests {
+    use super::Signature;
+    use crate::runtime::mock::with_process;
+    use crate::Address;
+    use std::vec;
+    use std::vec::Vec;
+
+    const BASE: u64 = 0x4000_0000;
+
+    // A range that starts and ends inside a page gives us a short first page
+    // and a short last page. Whatever we carry over between pages has to
+    // come from the page we actually read, however long it was.
+    #[test]
+    fn a_scan_survives_a_range_that_ends_inside_a_page() {
+        let mut image = vec![0u8; 0x3000];
+        image[0x1FFE..0x2002].copy_from_slice(&[0xAA, 0xBB, 0xCC, 0xDD]);
+        let signature: Signature<4> = Signature::new("AA BB CC DD");
+        with_process(&[(BASE, &image)], |process| {
+            let found: Vec<Address> = signature
+                .scan_iter(process, (Address::new(BASE + 0x100), 0x2200))
+                .collect();
+            assert_eq!(found, [Address::new(BASE + 0x1FFE)]);
+            let none: Vec<Address> = Signature::<4>::new("11 22 33 44")
+                .scan_iter(process, (Address::new(BASE + 0x100), 0x2200))
+                .collect();
+            assert!(none.is_empty());
+        });
+    }
+
+    // A range that starts 2 bytes before a page boundary gives us a first
+    // page shorter than the signature. The little it holds still counts
+    // toward a match across the boundary.
+    #[test]
+    fn a_short_first_page_still_carries_its_tail() {
+        let mut image = vec![0u8; 0x2000];
+        image[0xFFE..0x1002].copy_from_slice(&[0xAA, 0xBB, 0xCC, 0xDD]);
+        let signature: Signature<4> = Signature::new("AA BB CC DD");
+        with_process(&[(BASE, &image)], |process| {
+            let found: Vec<Address> = signature
+                .scan_iter(process, (Address::new(BASE + 0xFFE), 0x1000))
+                .collect();
+            assert_eq!(found, [Address::new(BASE + 0xFFE)]);
+        });
+    }
+
+    // Bytes on both sides of a page we couldn't read aren't next to each
+    // other in memory, so they must never match together.
+    #[test]
+    fn nothing_is_carried_across_a_page_that_failed_to_read() {
+        let mut first = vec![0u8; 0x1000];
+        first[0xFFE..].copy_from_slice(&[0xAA, 0xBB]);
+        let mut third = vec![0u8; 0x1000];
+        third[..2].copy_from_slice(&[0xCC, 0xDD]);
+        let signature: Signature<4> = Signature::new("AA BB CC DD");
+        with_process(&[(BASE, &first), (BASE + 0x2000, &third)], |process| {
+            let found: Vec<Address> = signature
+                .scan_iter(process, (Address::new(BASE), 0x3000))
+                .collect();
+            assert!(found.is_empty());
+        });
+    }
 }
