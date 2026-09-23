@@ -95,6 +95,23 @@ fn the_first_inline_path_build_is_2021_1() {
     );
 }
 
+// The root list moves inside Unity 2023.1: 2023.1.0 keeps it where 2022.3
+// does, 2023.1.22 keeps it further along. Both players are measured, so
+// each reads its own.
+#[test]
+fn the_root_list_moves_inside_2023_1() {
+    let roots = |player, pointer_size| {
+        let build = builds::nearest(player, pointer_size).unwrap();
+        (build.unity, build.profile.scene.roots)
+    };
+    let first = (2023, 1, 0, 2298);
+    let later = (2023, 1, 22, 16744);
+    assert_eq!(roots(first, PointerSize::Bit64), (first, 0xb0));
+    assert_eq!(roots(later, PointerSize::Bit64), (later, 0xe8));
+    assert_eq!(roots(first, PointerSize::Bit32), (first, 0x70));
+    assert_eq!(roots(later, PointerSize::Bit32), (later, 0x94));
+}
+
 #[test]
 fn a_pointer_path_reads_through_the_pointer() {
     let manager = manager((2018, 4, 36, 54151), PointerSize::Bit64);
