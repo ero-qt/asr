@@ -395,49 +395,50 @@ impl<'a> Pattern<'a> {
 
     /// Checks whether the signature matches these bytes, which are as many
     /// as the signature is long. Only starts whose anchor and check bytes
-    /// match get here. Compare whole words before the remaining bytes.
+    /// match get here. Scalar builds compare a byte at a time. With
+    /// simd128, compares 16 bytes at a time, then whole words, then the
+    /// remaining bytes.
     ///
     /// # Safety
     ///
     /// `hay` must have the same length as `self.needle`.
-    // An inline hint can duplicate the verifier in both candidate paths.
+    // Scalar builds inline the byte loop into the scan. With simd128, an
+    // inline hint duplicates the verifier in both candidate paths.
+    #[cfg_attr(not(target_feature = "simd128"), inline)]
     unsafe fn matches_at(&self, hay: &[u8]) -> bool {
         debug_assert!(hay.len() == self.needle.len() && hay.len() == self.mask.len());
-        // SAFETY: The caller guarantees hay.len() == needle.len(), and
-        // Pattern::new checks that the needle and mask have equal lengths.
-        // Exposing this invariant to the optimizer removes redundant bounds
-        // checks and zip length comparisons without checking each candidate.
-        unsafe {
-            core::hint::assert_unchecked(
-                hay.len() == self.needle.len() && hay.len() == self.mask.len(),
-            );
-        }
-        // SAFETY: The caller's length guarantee and Pattern's invariant give
-        // all three slices the same length.
-        #[cfg(target_feature = "simd128")]
-        let Some(checked) = (unsafe { self.matches_simd(hay) }) else {
-            return false;
-        };
-        #[cfg(target_feature = "simd128")]
-        if checked == hay.len() {
-            return true;
-        }
         #[cfg(not(target_feature = "simd128"))]
-        let checked = 0;
-        // Chunking the slices gives word-sized comparisons without unaligned
-        // pointer reads or a separate scanner for each signature length.
-        let (hay, tail) = hay[checked..].as_chunks::<8>();
-        let (needle, needle_tail) = self.needle[checked..].as_chunks::<8>();
-        let (mask, mask_tail) = self.mask[checked..].as_chunks::<8>();
-        if !hay.iter().zip(needle).zip(mask).all(|((h, n), m)| {
-            u64::from_ne_bytes(*h) & u64::from_ne_bytes(*m) == u64::from_ne_bytes(*n)
-        }) {
-            return false;
+        return hay
+            .iter()
+            .zip(self.needle)
+            .zip(self.mask)
+            .all(|((h, n), m)| h & m == *n);
+        #[cfg(target_feature = "simd128")]
+        {
+            // SAFETY: The caller's length guarantee and Pattern's invariant
+            // give all three slices the same length.
+            let Some(checked) = (unsafe { self.matches_simd(hay) }) else {
+                return false;
+            };
+            if checked == hay.len() {
+                return true;
+            }
+            // Chunking the slices gives word-sized comparisons without
+            // unaligned pointer reads or a separate scanner for each
+            // signature length.
+            let (hay, tail) = hay[checked..].as_chunks::<8>();
+            let (needle, needle_tail) = self.needle[checked..].as_chunks::<8>();
+            let (mask, mask_tail) = self.mask[checked..].as_chunks::<8>();
+            if !hay.iter().zip(needle).zip(mask).all(|((h, n), m)| {
+                u64::from_ne_bytes(*h) & u64::from_ne_bytes(*m) == u64::from_ne_bytes(*n)
+            }) {
+                return false;
+            }
+            tail.iter()
+                .zip(needle_tail)
+                .zip(mask_tail)
+                .all(|((h, n), m)| h & m == *n)
         }
-        tail.iter()
-            .zip(needle_tail)
-            .zip(mask_tail)
-            .all(|((h, n), m)| h & m == *n)
     }
 
     /// Compares 16 bytes at a time while there are that many. Returns how
