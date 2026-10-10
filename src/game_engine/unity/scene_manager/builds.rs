@@ -1007,6 +1007,7 @@ pub(super) const BUILDS: &[Build] = &[
 /// yet, so this keeps the signature and the offsets the walk used before the
 /// table existed. The offsets are the x64 layout of Unity 2018.4 through
 /// 2022.3.
+#[cfg(feature = "alloc")]
 pub(super) const MACHO_X64: Profile = Profile {
     pointer_size: PointerSize::Bit64,
     anchor: Anchor {

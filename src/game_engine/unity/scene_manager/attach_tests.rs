@@ -277,6 +277,7 @@ fn the_old_x86_anchor_leaves_the_scene_list_offset_open() {
 
 // The least of a PE header: the DOS header pointing at the COFF header, an
 // x64 machine, and an optional header carrying the size of the image.
+#[cfg(feature = "alloc")]
 fn pe_header(image: &mut [u8]) {
     put(image, 0, b"MZ");
     put(image, 0x3C, &0x80_u32.to_le_bytes());
@@ -287,6 +288,7 @@ fn pe_header(image: &mut [u8]) {
     put(image, 0x98 + 0x38, &(MODULE as u32).to_le_bytes());
 }
 
+#[cfg(feature = "alloc")]
 #[test]
 fn the_engine_module_is_the_player_when_there_is_one() {
     let mut player = vec![0; 0x200];
@@ -343,6 +345,7 @@ fn the_engine_module_is_the_linux_executable_when_there_is_no_player() {
 
 // A Linux player takes its build by the version string in `UnityPlayer.so`.
 // The 2022.3.5 build keeps scene paths inline and the roots at 0xe8.
+#[cfg(feature = "alloc")]
 #[test]
 fn a_linux_player_takes_the_build_measured_on_linux() {
     let mut image = vec![0; 0x2000];
@@ -376,4 +379,40 @@ fn a_linux_player_takes_the_build_measured_on_linux() {
     assert_eq!(manager.address, Address::new(BASE + 0x900));
     assert_eq!(manager.profile.path, super::offsets::PathShape::InlineNul);
     assert_eq!(manager.profile.scene.roots, 0xe8);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn an_executable_only_linux_player_attaches_automatically() {
+    let mut image = vec![0; 0x2000];
+    put(&mut image, 0, b"\x7fELF\x02\x01\x01");
+    put(&mut image, 0x300, b"\x005.6.7f1\0");
+    // The old Linux anchor loads the manager global into rbp before
+    // checking the scene count at 0x18.
+    put(
+        &mut image,
+        0x100,
+        &[0x41, 0x54, 0x49, 0x89, 0xFC, 0x55, 0x48, 0x8B, 0x2D],
+    );
+    let displacement = (0x800 - (0x100 + 9 + 4)) as i32;
+    put(&mut image, 0x100 + 9, &displacement.to_le_bytes());
+    put(
+        &mut image,
+        0x100 + 13,
+        &[0x53, 0x8B, 0x45, 0x18, 0x85, 0xC0, 0x74],
+    );
+    put(&mut image, 0x800, &(BASE + 0x900).to_le_bytes());
+
+    with_modules(&[(BASE, &image)], &[("fixture", BASE, MODULE)], |process| {
+        let manager = SceneManager::attach(process).unwrap();
+        assert_eq!(manager.address, Address::new(BASE + 0x900));
+        assert!(core::ptr::eq(
+            manager.profile,
+            &linux_builds::nearest((5, 6, 7, 0)).unwrap().profile,
+        ));
+        assert!(matches!(
+            crate::runtime::mock::poll_once(SceneManager::wait_attach(process)),
+            core::task::Poll::Ready(_),
+        ));
+    });
 }
