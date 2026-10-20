@@ -14,7 +14,76 @@ use crate::{
     PointerSize, Process,
 };
 
+mod offsets;
+pub use offsets::{Anchor, ClassOffsets, ObjectOffsets, Profile, PropertyOffsets};
+
+pub mod profiles;
+
+#[cfg(all(test, not(target_family = "wasm")))]
+mod profiles_tests;
+
 const CSTR: usize = 128;
+
+/// The anchors that find `GEngine`, tried in order.
+const G_ENGINE: [Anchor; 2] = [
+    Anchor {
+        signature: Signature::new(
+            "A8 01 75 ?? 48 C7 05 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??",
+        ),
+        displacement: 7,
+        next_instruction: 15,
+    },
+    Anchor {
+        signature: Signature::new(
+            "A8 01 75 ?? C7 05 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??",
+        ),
+        displacement: 6,
+        next_instruction: 14,
+    },
+];
+
+/// The anchors that find `GWorld`, tried in order.
+const G_WORLD: [Anchor; 2] = [
+    Anchor {
+        signature: Signature::new(
+            "80 7C 24 ?? 00 ?? ?? 48 8B 3D ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? ?? ?? ??",
+        ),
+        displacement: 10,
+        next_instruction: 14,
+    },
+    Anchor {
+        signature: Signature::new(
+            "48 8B 05 ?? ?? ?? ?? 48 3B ?? 48 0F 44 ?? 48 89 05 ?? ?? ?? ?? E8 ?? ??",
+        ),
+        displacement: 3,
+        next_instruction: 7,
+    },
+];
+
+/// The anchors that find the `FNamePool`, tried in order.
+const FNAME_POOL: [Anchor; 3] = [
+    Anchor {
+        signature: Signature::new(
+            "74 09 48 8D 15 ?? ?? ?? ?? EB 16 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??",
+        ),
+        displacement: 5,
+        next_instruction: 9,
+    },
+    Anchor {
+        signature: Signature::new(
+            "89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??",
+        ),
+        displacement: 13,
+        next_instruction: 17,
+    },
+    Anchor {
+        signature: Signature::new(
+            "57 0F B7 F8 74 ?? B8 ?? ?? ?? ?? 8B 44 ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ??",
+        ),
+        displacement: 7,
+        next_instruction: 11,
+    },
+];
 
 /// Represents access to a Unreal Engine game.
 ///
@@ -23,8 +92,7 @@ const CSTR: usize = 128;
 /// - GWorld: a pointer to the currently loaded UWorld object
 pub struct Module {
     pointer_size: PointerSize,
-    //version: Version,
-    offsets: &'static Offsets,
+    profile: Profile,
     g_engine: Address,
     g_world: Address,
     fname_base: Address,
@@ -39,64 +107,23 @@ impl Module {
         main_module_address: Address,
     ) -> Option<Self> {
         let pointer_size = pe::MachineType::read(process, main_module_address)?.pointer_size()?;
-        let offsets = Offsets::new(version, pointer_size)?;
+        let profile = *version.profile();
+        (pointer_size == profile.pointer_size).then_some(())?;
+
         let module_size = pe::read_size_of_image(process, main_module_address)? as u64;
         let module_range = (main_module_address, module_size);
-
-        let g_engine = {
-            const GENGINE: &[(Signature<7>, u8)] = &[
-                (Signature::new("A8 01 75 ?? 48 C7 05"), 7),
-                (Signature::new("A8 01 75 ?? C7 05 ??"), 6),
-            ];
-
-            let addr = GENGINE.iter().find_map(|(sig, offset)| {
-                Some(sig.scan_process_range(process, module_range)? + *offset)
-            })?;
-            addr + 0x8 + process.read::<i32>(addr).ok()?
-        };
-
-        let g_world = {
-            const GWORLD: &[(Signature<22>, u8)] = &[
-                (
-                    Signature::new(
-                        "80 7C 24 ?? 00 ?? ?? 48 8B 3D ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? ??",
-                    ),
-                    10,
-                ),
-                (
-                    Signature::new(
-                        "48 8B 05 ?? ?? ?? ?? 48 3B ?? 48 0F 44 ?? 48 89 05 ?? ?? ?? ?? E8",
-                    ),
-                    3,
-                ),
-            ];
-
-            let addr = GWORLD.iter().find_map(|(sig, offset)| {
-                Some(sig.scan_process_range(process, module_range)? + *offset)
-            })?;
-            addr + 0x4 + process.read::<i32>(addr).ok()?
-        };
-
-        let fname_base = {
-            const FNAME_POOL: &[(Signature<13>, u8)] = &[
-                (Signature::new("74 09 48 8D 15 ?? ?? ?? ?? EB 16 ?? ??"), 5),
-                (Signature::new("89 5C 24 ?? 89 44 24 ?? 74 ?? 48 8D 15"), 13),
-                (Signature::new("57 0F B7 F8 74 ?? B8 ?? ?? ?? ?? 8B 44"), 7),
-            ];
-
-            let addr = FNAME_POOL.iter().find_map(|(sig, offset)| {
-                Some(sig.scan_process_range(process, module_range)? + *offset)
-            })?;
-            addr + 0x4 + process.read::<i32>(addr).ok()?
+        let find = |anchors: &[Anchor]| {
+            anchors
+                .iter()
+                .find_map(|anchor| global(process, module_range, anchor))
         };
 
         Some(Self {
             pointer_size,
-            //version,
-            offsets,
-            g_engine,
-            g_world,
-            fname_base,
+            profile,
+            g_engine: find(&G_ENGINE)?,
+            g_world: find(&G_WORLD)?,
+            fname_base: find(&FNAME_POOL)?,
         })
     }
 
@@ -199,7 +226,7 @@ impl UObject {
         process: &Process,
         module: &Module,
     ) -> Result<ArrayCString<N>, Error> {
-        let key = process.read::<FNameKey>(self.object + module.offsets.uobject_fname)?;
+        let key = process.read::<FNameKey>(self.object + module.profile.object.fname)?;
 
         module.get_fname(process, key)
     }
@@ -207,7 +234,7 @@ impl UObject {
     /// Returns the underlying class definition for the current `UObject`
     fn get_uclass(&self, process: &Process, module: &Module) -> Result<UClass, Error> {
         match process.read_pointer(
-            self.object + module.offsets.uobject_class,
+            self.object + module.profile.object.class,
             module.pointer_size,
         ) {
             Ok(Address::NULL) | Err(_) => Err(Error {}),
@@ -262,11 +289,11 @@ impl UClass {
 
             while val.is_none() {
                 match process.read_pointer(
-                    current_class.class + module.offsets.uclass_property_link,
+                    current_class.class + module.profile.class.property_link,
                     module.pointer_size,
                 ) {
                     Ok(Address::NULL) => match process.read_pointer(
-                        current_class.class + module.offsets.uclass_super_field,
+                        current_class.class + module.profile.class.super_field,
                         module.pointer_size,
                     ) {
                         Ok(Address::NULL) | Err(_) => break,
@@ -288,7 +315,7 @@ impl UClass {
 
         iter::from_fn(move || match current_property {
             Some(prop) => match process.read_pointer(
-                prop.property + module.offsets.uproperty_property_link_next,
+                prop.property + module.profile.property.property_link_next,
                 module.pointer_size,
             ) {
                 Ok(val) => {
@@ -338,14 +365,14 @@ impl UProperty {
         process: &Process,
         module: &Module,
     ) -> Result<ArrayCString<N>, Error> {
-        let key = process.read::<FNameKey>(self.property + module.offsets.uproperty_fname)?;
+        let key = process.read::<FNameKey>(self.property + module.profile.property.fname)?;
 
         module.get_fname(process, key)
     }
 
     fn get_offset(&self, process: &Process, module: &Module) -> Option<u32> {
         process
-            .read(self.property + module.offsets.uproperty_offset_internal)
+            .read(self.property + module.profile.property.offset_internal)
             .ok()
     }
 }
@@ -483,59 +510,11 @@ impl<const CAP: usize> UnrealPointer<CAP> {
     }
 }
 
-struct Offsets {
-    uobject_fname: u8,
-    uobject_class: u8,
-    uclass_super_field: u8,
-    uclass_property_link: u8,
-    uproperty_fname: u8,
-    uproperty_offset_internal: u8,
-    uproperty_property_link_next: u8,
-}
-
-impl Offsets {
-    const fn new(version: Version, pointer_size: PointerSize) -> Option<&'static Self> {
-        match pointer_size {
-            PointerSize::Bit64 => Some(match version {
-                // Tested on: Sonic Omens
-                Version::V4_23 | Version::V4_24 => &Self {
-                    uobject_fname: 0x18,
-                    uobject_class: 0x10,
-                    uclass_super_field: 0x40,
-                    uclass_property_link: 0x48,
-                    uproperty_fname: 0x18,
-                    uproperty_offset_internal: 0x44,
-                    uproperty_property_link_next: 0x50,
-                },
-                // Tested on: Tetris Effect / Kao the Kangaroo
-                Version::V4_25
-                | Version::V4_26
-                | Version::V4_27
-                | Version::V5_0
-                | Version::V5_1
-                | Version::V5_2 => &Self {
-                    uobject_fname: 0x18,
-                    uobject_class: 0x10,
-                    uclass_super_field: 0x40,
-                    uclass_property_link: 0x50,
-                    uproperty_fname: 0x28,
-                    uproperty_offset_internal: 0x4C,
-                    uproperty_property_link_next: 0x58,
-                },
-                // Tested on Unreal Physics
-                Version::V5_3 | Version::V5_4 => &Self {
-                    uobject_fname: 0x18,
-                    uobject_class: 0x10,
-                    uclass_super_field: 0x40,
-                    uclass_property_link: 0x50,
-                    uproperty_fname: 0x20,
-                    uproperty_offset_internal: 0x44,
-                    uproperty_property_link_next: 0x48,
-                },
-            }),
-            _ => None,
-        }
-    }
+/// Finds a global through the first match of an anchor in the main module.
+fn global(process: &Process, module_range: (Address, u64), anchor: &Anchor) -> Option<Address> {
+    let at = anchor.signature.scan_process_range(process, module_range)?;
+    let displacement = process.read::<i32>(at + anchor.displacement as u64).ok()?;
+    Some(at + anchor.next_instruction as u64 + displacement)
 }
 
 #[non_exhaustive]
@@ -553,4 +532,20 @@ pub enum Version {
     V5_2,
     V5_3,
     V5_4,
+}
+
+impl Version {
+    /// Returns the built-in profile of the layout this version has.
+    const fn profile(self) -> &'static Profile {
+        match self {
+            Version::V4_23 | Version::V4_24 => &profiles::UNREAL_4_23_X86_64,
+            Version::V4_25
+            | Version::V4_26
+            | Version::V4_27
+            | Version::V5_0
+            | Version::V5_1
+            | Version::V5_2 => &profiles::UNREAL_4_25_X86_64,
+            Version::V5_3 | Version::V5_4 => &profiles::UNREAL_5_3_X86_64,
+        }
+    }
 }
